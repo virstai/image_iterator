@@ -1,0 +1,77 @@
+<template>
+  <aside class="panel">
+    <div class="panel-header">
+      <h2>Global Settings</h2>
+      <button class="close-btn" @click="$emit('close')">&#x2715;</button>
+    </div>
+
+    <div class="row">
+      <label>Ollama URL     <input type="url"    v-model="form.ollamaUrl"  placeholder="http://host:11434"></label>
+      <label>ComfyUI URL    <input type="url"    v-model="form.comfyuiUrl" placeholder="http://host:8188"></label>
+    </div>
+
+    <label>Ollama model (prompt building &amp; review)
+      <select v-model="form.ollamaModel">
+        <option value="">— select —</option>
+        <option v-for="m in assets.ollama" :key="m" :value="m">{{ m }}</option>
+      </select>
+    </label>
+
+    <div class="row">
+      <label>Max iterations
+        <input type="number" v-model.number="form.maxIterations" min="1" max="20" placeholder="3">
+      </label>
+      <label class="checkbox-label" style="justify-content:flex-end;align-self:flex-end;padding-bottom:12px">
+        <input type="checkbox" v-model="form.humanReview"> Human review after each iteration
+      </label>
+    </div>
+
+    <div class="panel-actions">
+      <button class="primary"   @click="save">Save</button>
+      <button class="secondary" @click="$emit('close')">Cancel</button>
+      <button class="secondary" @click="reloadAssets">Reload asset lists</button>
+    </div>
+  </aside>
+</template>
+
+<script setup>
+import { reactive, watch } from 'vue';
+import { saveConfig, loadAssets } from '../stores/config.js';
+
+const props = defineProps({
+  config: { type: Object, default: () => ({}) },
+  assets: { type: Object, default: () => ({ ollama: [] }) },
+});
+const emit = defineEmits(['saved', 'close']);
+
+const form = reactive({
+  ollamaUrl:     '',
+  comfyuiUrl:    '',
+  ollamaModel:   '',
+  maxIterations: '',
+  humanReview:   false,
+});
+
+watch(() => props.config, cfg => {
+  form.ollamaUrl     = cfg.ollamaUrl     ?? '';
+  form.comfyuiUrl    = cfg.comfyuiUrl    ?? '';
+  form.ollamaModel   = cfg.ollamaModel   ?? '';
+  form.maxIterations = cfg.maxIterations ?? '';
+  form.humanReview   = !!cfg.humanReview;
+}, { immediate: true });
+
+async function save() {
+  await saveConfig({
+    ollamaUrl:     form.ollamaUrl  || null,
+    comfyuiUrl:    form.comfyuiUrl || null,
+    ollamaModel:   form.ollamaModel || null,
+    maxIterations: form.maxIterations || null,
+    humanReview:   form.humanReview,
+  });
+  emit('saved');
+}
+
+async function reloadAssets() {
+  await loadAssets();
+}
+</script>

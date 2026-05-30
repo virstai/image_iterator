@@ -1,0 +1,45 @@
+'use strict';
+
+const express = require('express');
+const path = require('path');
+const { createServer } = require('http');
+
+const config = require('./src/services/config');
+const generateRoutes = require('./src/routes/generate');
+const sessionsRoutes = require('./src/routes/sessions');
+
+const app = express();
+const server = createServer(app);
+
+app.use(express.json());
+app.use(express.static(path.join(__dirname, 'public')));
+
+app.use('/api/generate', generateRoutes);
+app.use('/api/sessions', sessionsRoutes);
+
+// Proxy ComfyUI image output so the browser doesn't need direct access
+app.get('/api/image', async (req, res) => {
+  const { filename, subfolder = '', type = 'output' } = req.query;
+  if (!filename) return res.status(400).json({ error: 'filename required' });
+
+  const { comfyuiUrl } = config.load();
+  const url = `${comfyuiUrl}/view?filename=${encodeURIComponent(filename)}&subfolder=${encodeURIComponent(subfolder)}&type=${encodeURIComponent(type)}`;
+
+  try {
+    const upstream = await fetch(url);
+    if (!upstream.ok) return res.status(upstream.status).send('ComfyUI error');
+    res.set('Content-Type', upstream.headers.get('content-type') || 'image/png');
+    const buf = await upstream.arrayBuffer();
+    res.send(Buffer.from(buf));
+  } catch (err) {
+    res.status(502).json({ error: 'Could not reach ComfyUI', detail: err.message });
+  }
+});
+
+const PORT = process.env.PORT || 3000;
+server.listen(PORT, () => {
+  const cfg = config.load();
+  console.log(`image-iterator running at http://localhost:${PORT}`);
+  console.log(`  Ollama:  ${cfg.ollamaUrl}`);
+  console.log(`  ComfyUI: ${cfg.comfyuiUrl}`);
+});
