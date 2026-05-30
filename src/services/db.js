@@ -3,14 +3,14 @@
 const fs   = require('fs');
 const path = require('path');
 
-const SESSIONS_DIR = path.join(__dirname, '../../data/sessions');
+const sessionsDir = () => process.env.SESSIONS_DIR || path.join(__dirname, '../../data/sessions');
 
 function ensureDir() {
-  fs.mkdirSync(SESSIONS_DIR, { recursive: true });
+  fs.mkdirSync(sessionsDir(), { recursive: true });
 }
 
 function sessionPath(id) {
-  return path.join(SESSIONS_DIR, `${id}.json`);
+  return path.join(sessionsDir(), `${id}.json`);
 }
 
 function saveSession(session) {
@@ -26,9 +26,9 @@ function loadSession(id) {
 function listSessions(limit = 100) {
   ensureDir();
   try {
-    return fs.readdirSync(SESSIONS_DIR)
+    return fs.readdirSync(sessionsDir())
       .filter(f => f.endsWith('.json'))
-      .map(f => { try { return JSON.parse(fs.readFileSync(path.join(SESSIONS_DIR, f), 'utf8')); } catch { return null; } })
+      .map(f => { try { return JSON.parse(fs.readFileSync(path.join(sessionsDir(), f), 'utf8')); } catch { return null; } })
       .filter(Boolean)
       .sort((a, b) => (b.updatedAt ?? b.createdAt ?? '').localeCompare(a.updatedAt ?? a.createdAt ?? ''))
       .slice(0, limit);

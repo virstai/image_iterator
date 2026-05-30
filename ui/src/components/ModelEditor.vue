@@ -134,33 +134,28 @@
     </label>
 
     <!-- Skill section -->
-    <div v-if="skillData && (skillData.skill || hasFormatData)" class="skill-section">
+    <div v-if="skillData" class="skill-section">
       <hr>
       <h3>Model Skill</h3>
       <div v-if="skillData.skill" class="skill-text">{{ skillData.skill }}</div>
       <div v-else class="skill-text" style="color:var(--muted)">No skill synthesised yet — will be generated after the first session.</div>
       <div v-if="skillData.skillUpdatedAt" class="hint">Last updated {{ formatDate(skillData.skillUpdatedAt) }}</div>
 
-      <template v-if="hasFormatData">
-        <h3 style="margin-top:14px">Format Performance</h3>
-        <div v-for="(stats, format) in skillData.formats" :key="format" class="ln-row">
-          <template v-if="stats.accepts + stats.rejects > 0">
-            <div class="ln-header">
-              <span class="ln-format">{{ format }}</span>
-              <span class="ln-rate">{{ stats.accepts }}/{{ stats.accepts + stats.rejects }} accepted</span>
-              <div class="ln-bar"><div class="ln-fill" :style="{ width: acceptRate(stats) + '%' }"></div></div>
-              <span class="ln-pct">{{ acceptRate(stats) }}%</span>
-            </div>
-            <ul class="ln-notes">
-              <li
-                v-for="(note, i) in (stats.notes ?? []).slice(-4).reverse()"
-                :key="i"
-                class="ln-note"
-                :class="note.verdict === 'ACCEPT' ? 'ln-accept' : 'ln-reject'"
-              >{{ note.verdict === 'ACCEPT' ? '✓' : '✗' }} {{ note.diagnosis }}</li>
-            </ul>
-          </template>
+      <template v-if="skillData.outcomes && (skillData.outcomes.accepts + skillData.outcomes.rejects) > 0">
+        <h3 style="margin-top:14px">Outcomes</h3>
+        <div class="ln-header">
+          <span class="ln-rate">{{ skillData.outcomes.accepts }}/{{ skillData.outcomes.accepts + skillData.outcomes.rejects }} accepted</span>
+          <div class="ln-bar"><div class="ln-fill" :style="{ width: outcomeRate + '%' }"></div></div>
+          <span class="ln-pct">{{ outcomeRate }}%</span>
         </div>
+        <ul class="ln-notes">
+          <li
+            v-for="(note, i) in (skillData.outcomes.notes ?? []).slice(-4).reverse()"
+            :key="i"
+            class="ln-note"
+            :class="note.verdict === 'ACCEPT' ? 'ln-accept' : 'ln-reject'"
+          >{{ note.verdict === 'ACCEPT' ? '✓' : '✗' }} {{ note.diagnosis }}</li>
+        </ul>
       </template>
     </div>
 
@@ -239,16 +234,16 @@ const showCfg         = computed(() => ['sd15','sdxl','sd3','anima'].includes(ar
 const showGuidance    = computed(() => ['flux','flux2','chroma'].includes(arch.value));
 const showNegative    = computed(() => ['sd15','sdxl','sd3','anima'].includes(arch.value));
 const archNotes       = computed(() => props.archMeta[arch.value]?.notes ?? null);
-const hasFormatData   = computed(() => Object.values(skillData.value?.formats ?? {}).some(s => s.accepts + s.rejects > 0));
+const outcomeRate = computed(() => {
+  const o = skillData.value?.outcomes;
+  if (!o) return 0;
+  const total = o.accepts + o.rejects;
+  return total ? Math.round((o.accepts / total) * 100) : 0;
+});
 
 function archDefaultVal(key) {
   const d = props.archMeta[arch.value]?.defaults;
   return d?.[key] != null ? String(d[key]) : 'default';
-}
-
-function acceptRate(stats) {
-  const total = stats.accepts + stats.rejects;
-  return total ? Math.round((stats.accepts / total) * 100) : 0;
 }
 
 function formatDate(iso) {

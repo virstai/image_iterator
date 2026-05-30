@@ -3,8 +3,8 @@
 const fs   = require('fs');
 const path = require('path');
 
-const DATA_DIR    = path.join(__dirname, '../../data');
-const CONFIG_PATH = path.join(DATA_DIR, 'config.json');
+const dataDir    = () => process.env.DATA_DIR    || path.join(__dirname, '../../data');
+const configPath = () => path.join(dataDir(), 'config.json');
 
 const GLOBAL_DEFAULTS = {
   ollamaUrl:     'http://127.0.0.1:11434',
@@ -18,7 +18,7 @@ const GLOBAL_DEFAULTS = {
 
 function load() {
   let saved = {};
-  try { saved = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8')); } catch { /* no file yet */ }
+  try { saved = JSON.parse(fs.readFileSync(configPath(), 'utf8')); } catch { /* no file yet */ }
 
   return {
     ...GLOBAL_DEFAULTS,
@@ -31,8 +31,8 @@ function load() {
 
 function save(updates) {
   const next = { ...load(), ...updates };
-  fs.mkdirSync(DATA_DIR, { recursive: true });
-  fs.writeFileSync(CONFIG_PATH, JSON.stringify(next, null, 2));
+  fs.mkdirSync(dataDir(), { recursive: true });
+  fs.writeFileSync(configPath(), JSON.stringify(next, null, 2));
   return next;
 }
 

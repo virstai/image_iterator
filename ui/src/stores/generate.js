@@ -14,12 +14,12 @@ function blankIteration(n) {
   return {
     n,
     status:          '',
-    format:          null,
     streamingPrompt: '',
     prompt:          null,
     progress:        0,
     imageUrl:        null,
     streamingReview: '',
+    fullReview:      null,
     diagnosis:       null,
     verdict:         null,
     humanPending:    false,
@@ -48,7 +48,6 @@ export function handleEvent(event, data) {
 
     case 'history': {
       const it = ensureIteration(data.iteration);
-      it.format    = data.format    ?? it.format;
       it.prompt    = data.prompt    ?? it.prompt;
       it.imageUrl  = data.imageUrl  ?? it.imageUrl;
       it.diagnosis = data.diagnosis ?? it.diagnosis;
@@ -76,7 +75,6 @@ export function handleEvent(event, data) {
 
     case 'prompt': {
       const it = ensureIteration(data.iteration);
-      it.format          = data.format;
       it.prompt          = data.prompt;
       it.streamingPrompt = '';
       break;
@@ -97,6 +95,7 @@ export function handleEvent(event, data) {
 
     case 'review': {
       const it = ensureIteration(data.iteration);
+      it.fullReview      = it.streamingReview || null;
       it.diagnosis       = data.diagnosis;
       it.verdict         = data.verdict;
       it.streamingReview = '';
@@ -128,8 +127,11 @@ export function handleEvent(event, data) {
       genState.status    = data.accepted ? 'Accepted' : 'Done — max iterations reached';
       genState.iterBadge = '';
       genState.running   = false;
-      // show continue bar after any completed run
-      if (!genState.loadedDesc) genState.loadedDesc = genState.iterations[0]?.prompt ?? '';
+      if (data.accepted) {
+        genState.loadedDesc = null;
+      } else {
+        genState.loadedDesc = data.description || '';
+      }
       break;
 
     case 'error':
@@ -236,4 +238,7 @@ export async function submitHumanReview(sessionId, accept, feedback) {
 export function clearSession() {
   genState.sessionId  = null;
   genState.loadedDesc = null;
+  genState.iterations = [];
+  genState.status     = '';
+  genState.iterBadge  = '';
 }

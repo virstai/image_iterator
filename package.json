@@ -8,7 +8,10 @@
     "server:dev": "node --watch server.js",
     "ui:dev":     "vite",
     "ui:build":   "vite build",
-    "dev":        "concurrently -n api,ui -c cyan,magenta \"npm run server:dev\" \"npm run ui:dev\""
+    "dev":        "concurrently -n api,ui -c cyan,magenta \"npm run server:dev\" \"npm run ui:dev\"",
+    "test":       "node --test test/**/*.test.js",
+    "test:unit":  "node --test test/unit/*.test.js",
+    "test:int":   "node --test test/integration/*.test.js"
   },
   "keywords": [],
   "author": "",
