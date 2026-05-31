@@ -208,15 +208,12 @@ router.post('/txt2img', async (req, res) => {
       const iterOverrides = iterSeed != null ? { ...overrides, seed: iterSeed } : overrides;
 
       // Start a generation run via our own /api/generate/run endpoint.
+      // acceptanceGracePeriod is intentionally omitted so the configured value is used —
+      // the broadcast SSE lets the UI show the grace-period window even for sdapi sessions.
       const runRes = await fetch(`http://${host}/api/generate/run`, {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({
-          prompt,
-          overrides:             iterOverrides,
-          modelId,
-          acceptanceGracePeriod: 0,  // A1111 callers have no mechanism to refuse
-        }),
+        body:    JSON.stringify({ prompt, overrides: iterOverrides, modelId }),
         signal: ac.signal,
       });
 
