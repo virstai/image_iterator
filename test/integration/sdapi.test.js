@@ -176,12 +176,16 @@ test('POST /sdapi/v1/txt2img returns 400 when prompt is missing', async () => {
   assert.ok(body.error, 'should return an error message');
 });
 
-test('POST /sdapi/v1/txt2img returns 400 for unknown override_settings model', async () => {
+test('POST /sdapi/v1/txt2img falls back to active model when override_settings model is unrecognised', async () => {
+  // Unrecognised checkpoint names (e.g. "automatic1111" echoed by some clients) should
+  // fall back to the active model rather than returning a hard 400.
   const res = await postJSON(sdapi('/txt2img'), {
     prompt:            'test',
     override_settings: { sd_model_checkpoint: 'NonExistentModel' },
   });
-  assert.equal(res.status, 400);
+  assert.equal(res.status, 200);
+  const data = await res.json();
+  assert.ok(Array.isArray(data.images));
 });
 
 test('POST /sdapi/v1/txt2img with rejection loops returns the last image when max iterations reached', async () => {

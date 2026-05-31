@@ -32,25 +32,40 @@ const jobState = {
 };
 
 // ── Sampler name mapping (A1111 display name → our internal names) ────────────
+// Any name not in this map (including "Automatic" and empty strings) leaves the
+// sampler override unset so the model's workflow default is used instead.
 
 const SAMPLER_MAP = {
-  'euler':                { sampler: 'euler' },
-  'euler a':              { sampler: 'euler_ancestral' },
-  'euler ancestral':      { sampler: 'euler_ancestral' },
-  'dpm++ 2m':             { sampler: 'dpmpp_2m' },
-  'dpm++ 2m karras':      { sampler: 'dpmpp_2m',      scheduler: 'karras' },
-  'dpm++ 2m sde':         { sampler: 'dpmpp_2m_sde' },
-  'dpm++ 2m sde karras':  { sampler: 'dpmpp_2m_sde',  scheduler: 'karras' },
-  'dpm++ 3m sde':         { sampler: 'dpmpp_3m_sde' },
-  'dpm++ 3m sde karras':  { sampler: 'dpmpp_3m_sde',  scheduler: 'karras' },
-  'ddim':                 { sampler: 'ddim' },
-  'unipc':                { sampler: 'uni_pc' },
-  'uni pc':               { sampler: 'uni_pc' },
+  'euler':                 { sampler: 'euler' },
+  'euler a':               { sampler: 'euler_ancestral' },
+  'euler ancestral':       { sampler: 'euler_ancestral' },
+  'heun':                  { sampler: 'heun' },
+  'lms':                   { sampler: 'lms' },
+  'dpm2':                  { sampler: 'dpm_2' },
+  'dpm2 a':                { sampler: 'dpm_2_ancestral' },
+  'dpm++ sde':             { sampler: 'dpmpp_sde' },
+  'dpm++ sde karras':      { sampler: 'dpmpp_sde',      scheduler: 'karras' },
+  'dpm++ 2m':              { sampler: 'dpmpp_2m' },
+  'dpm++ 2m karras':       { sampler: 'dpmpp_2m',       scheduler: 'karras' },
+  'dpm++ 2m sde':          { sampler: 'dpmpp_2m_sde' },
+  'dpm++ 2m sde karras':   { sampler: 'dpmpp_2m_sde',   scheduler: 'karras' },
+  'dpm++ 3m sde':          { sampler: 'dpmpp_3m_sde' },
+  'dpm++ 3m sde karras':   { sampler: 'dpmpp_3m_sde',   scheduler: 'karras' },
+  'ddim':                  { sampler: 'ddim' },
+  'unipc':                 { sampler: 'uni_pc' },
+  'uni pc':                { sampler: 'uni_pc' },
 };
 
 const SAMPLERS_LIST = [
+  { name: 'Automatic',            aliases: [],                       options: {} },
   { name: 'Euler',                aliases: ['euler'],                options: {} },
   { name: 'Euler a',              aliases: ['euler_a'],              options: {} },
+  { name: 'Heun',                 aliases: ['heun'],                 options: {} },
+  { name: 'LMS',                  aliases: ['lms'],                  options: {} },
+  { name: 'DPM2',                 aliases: ['dpm_2'],                options: {} },
+  { name: 'DPM2 a',              aliases: ['dpm_2_ancestral'],      options: {} },
+  { name: 'DPM++ SDE',           aliases: ['dpmpp_sde'],            options: {} },
+  { name: 'DPM++ SDE Karras',    aliases: ['dpmpp_sde_karras'],     options: {} },
   { name: 'DPM++ 2M',            aliases: ['dpmpp_2m'],             options: {} },
   { name: 'DPM++ 2M Karras',     aliases: ['dpmpp_2m_karras'],      options: {} },
   { name: 'DPM++ 2M SDE',        aliases: ['dpmpp_2m_sde'],         options: {} },
@@ -140,14 +155,15 @@ router.post('/txt2img', async (req, res) => {
   if (!prompt.trim()) return res.status(400).json({ error: 'prompt is required' });
 
   // Resolve model — override_settings.sd_model_checkpoint takes precedence over active model.
+  // If the value is set but unrecognised (e.g. clients that echo back the backend name like
+  // "automatic1111"), fall back to the active model rather than returning a hard 400.
   let modelId;
   if (override_settings.sd_model_checkpoint) {
-    modelId = findModelId(cfg, override_settings.sd_model_checkpoint);
-    if (!modelId) return res.status(400).json({ error: `Model "${override_settings.sd_model_checkpoint}" not found` });
+    modelId = findModelId(cfg, override_settings.sd_model_checkpoint) ?? cfg.activeModel;
   } else {
     modelId = cfg.activeModel;
   }
-  if (!cfg.models[modelId]) return res.status(400).json({ error: 'No active model configured' });
+  if (!cfg.models?.[modelId]) return res.status(400).json({ error: 'No active model configured' });
 
   // Translate A1111 params to our overrides object.
   const overrides = {};
@@ -163,10 +179,9 @@ router.post('/txt2img', async (req, res) => {
     if (mapped) {
       overrides.sampler = mapped.sampler;
       if (mapped.scheduler) overrides.scheduler = mapped.scheduler;
-    } else {
-      // Pass through unrecognised names as-is (lower-snake).
-      overrides.sampler = sampler_name.toLowerCase().replace(/\s+/g, '_');
     }
+    // Unrecognised names (including "Automatic" / backend-specific samplers) are
+    // intentionally ignored so the model's workflow default kicks in.
   }
 
   // Explicit top-level scheduler overrides any scheduler inferred from the sampler name.
