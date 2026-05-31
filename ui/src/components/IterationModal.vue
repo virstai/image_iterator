@@ -53,7 +53,11 @@
         </div>
 
         <div v-if="iteration.acceptedPending" class="human-review">
-          <span class="hr-ai-note">Accepted — {{ iteration.gracePeriod }}s grace period active. Refuse to continue iterating.</span>
+          <span class="hr-ai-note">
+            {{ iteration.graceMaxIterations
+              ? `Max iterations reached — ${iteration.gracePeriod}s to refuse and keep iterating.`
+              : `Accepted — ${iteration.gracePeriod}s grace period active. Refuse to continue iterating.` }}
+          </span>
           <div class="hr-actions">
             <button class="danger" :disabled="submitting" @click="refuse">Refuse &amp; continue</button>
           </div>

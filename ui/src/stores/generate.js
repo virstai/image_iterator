@@ -18,19 +18,20 @@ let _hasDirectStream = false;
 function blankIteration(n) {
   return {
     n,
-    status:          '',
-    streamingPrompt: '',
-    prompt:          null,
-    progress:        0,
-    imageUrl:        null,
-    streamingReview: '',
-    fullReview:      null,
-    diagnosis:       null,
-    verdict:         null,
-    humanPending:    false,
-    aiVerdict:       null,
-    aiDiagnosis:     null,
-    humanFeedback:   null,
+    status:            '',
+    streamingPrompt:   '',
+    prompt:            null,
+    progress:          0,
+    imageUrl:          null,
+    streamingReview:   '',
+    fullReview:        null,
+    diagnosis:         null,
+    verdict:           null,
+    humanPending:      false,
+    aiVerdict:         null,
+    aiDiagnosis:       null,
+    humanFeedback:     null,
+    graceMaxIterations: false,
   };
 }
 
@@ -130,9 +131,12 @@ export function handleEvent(event, data) {
 
     case 'accepted_pending': {
       const it = ensureIteration(data.iteration);
-      it.acceptedPending = true;
-      it.gracePeriod     = data.gracePeriod;
-      genState.status    = `Accepted — ${data.gracePeriod}s to refuse`;
+      it.acceptedPending    = true;
+      it.gracePeriod        = data.gracePeriod;
+      it.graceMaxIterations = !!data.maxIterations;
+      genState.status = data.maxIterations
+        ? `Max iterations — ${data.gracePeriod}s to continue`
+        : `Accepted — ${data.gracePeriod}s to refuse`;
       break;
     }
 

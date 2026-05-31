@@ -64,100 +64,121 @@ async function runLoop(session, cfg, modelConfig, overrides, res) {
   });
 
   try {
-    let accepted = false;
+    let accepted    = false;
+    let continueLoop = true;
 
-    for (let i = 0; i < maxNewIter && !accepted; i++) {
-      const iterNum = session.iterations.length + 1; // global iteration number
+    while (continueLoop) {
+      continueLoop = false;
 
-      // ── Phase 1: build prompt ────────────────────────────────────────────
-      emit(res, 'phase', { phase: 'prompt_building', iteration: iterNum });
-      console.log(`[${tag}] iter ${iterNum}: building prompt…`);
+      for (let i = 0; i < maxNewIter && !accepted; i++) {
+        const iterNum = session.iterations.length + 1; // global iteration number
 
-      const messages = session.iterations.length === 0
-        ? buildInitialMessages(session.prompt, arch, archDefaults, skillSummary)
-        : buildRefinementMessages(session.prompt, session.iterations, arch, skillSummary);
+        // ── Phase 1: build prompt ──────────────────────────────────────────
+        emit(res, 'phase', { phase: 'prompt_building', iteration: iterNum });
+        console.log(`[${tag}] iter ${iterNum}: building prompt…`);
 
-      const raw = await ollama.chatStream(cfg.ollamaModel, messages, token => {
-        emit(res, 'token', { iteration: iterNum, phase: 'prompt', token });
-        process.stdout.write(token);
-      });
-      process.stdout.write('\n');
+        const messages = session.iterations.length === 0
+          ? buildInitialMessages(session.prompt, arch, archDefaults, skillSummary)
+          : buildRefinementMessages(session.prompt, session.iterations, arch, skillSummary);
 
-      const prompt = parsePromptResponse(raw);
-      console.log(`[${tag}] iter ${iterNum}: prompt="${prompt.slice(0, 80)}${prompt.length > 80 ? '…' : ''}"`);
-      emit(res, 'prompt', { iteration: iterNum, prompt });
+        const raw = await ollama.chatStream(cfg.ollamaModel, messages, token => {
+          emit(res, 'token', { iteration: iterNum, phase: 'prompt', token });
+          process.stdout.write(token);
+        });
+        process.stdout.write('\n');
 
-      // ── Phase 2: generate image ──────────────────────────────────────────
-      emit(res, 'phase', { phase: 'generating', iteration: iterNum });
-      console.log(`[${tag}] iter ${iterNum}: queuing ComfyUI job…`);
+        const prompt = parsePromptResponse(raw);
+        console.log(`[${tag}] iter ${iterNum}: prompt="${prompt.slice(0, 80)}${prompt.length > 80 ? '…' : ''}"`);
+        emit(res, 'prompt', { iteration: iterNum, prompt });
 
-      const { workflow } = buildWorkflow(modelConfig, { ...genParams, positivePrompt: prompt });
-      const { images } = await comfyui.generate(workflow, pct => {
-        emit(res, 'progress', { iteration: iterNum, pct });
-        process.stdout.write(`\r[${tag}] iter ${iterNum}: generating ${pct}%   `);
-      });
-      process.stdout.write('\n');
+        // ── Phase 2: generate image ────────────────────────────────────────
+        emit(res, 'phase', { phase: 'generating', iteration: iterNum });
+        console.log(`[${tag}] iter ${iterNum}: queuing ComfyUI job…`);
 
-      if (!images.length) throw new Error('ComfyUI returned no images');
-      const image    = images[0];
-      const imageUrl = `/api/image?filename=${encodeURIComponent(image.filename)}&subfolder=${encodeURIComponent(image.subfolder ?? '')}&type=${encodeURIComponent(image.type ?? 'output')}`;
-      console.log(`[${tag}] iter ${iterNum}: image ready — ${image.filename}`);
-      emit(res, 'image', { iteration: iterNum, url: imageUrl });
+        const { workflow } = buildWorkflow(modelConfig, { ...genParams, positivePrompt: prompt });
+        const { images } = await comfyui.generate(workflow, pct => {
+          emit(res, 'progress', { iteration: iterNum, pct });
+          process.stdout.write(`\r[${tag}] iter ${iterNum}: generating ${pct}%   `);
+        });
+        process.stdout.write('\n');
 
-      // Fetch image as base64 for vision review
-      const imgFetchUrl = `${cfg.comfyuiUrl}/view?filename=${encodeURIComponent(image.filename)}&subfolder=${encodeURIComponent(image.subfolder ?? '')}&type=${encodeURIComponent(image.type ?? 'output')}`;
-      const imgRes = await fetch(imgFetchUrl);
-      if (!imgRes.ok) throw new Error(`Failed to fetch image for review: ${imgRes.status}`);
-      const imageBase64 = Buffer.from(await imgRes.arrayBuffer()).toString('base64');
+        if (!images.length) throw new Error('ComfyUI returned no images');
+        const image    = images[0];
+        const imageUrl = `/api/image?filename=${encodeURIComponent(image.filename)}&subfolder=${encodeURIComponent(image.subfolder ?? '')}&type=${encodeURIComponent(image.type ?? 'output')}`;
+        console.log(`[${tag}] iter ${iterNum}: image ready — ${image.filename}`);
+        emit(res, 'image', { iteration: iterNum, url: imageUrl });
 
-      // ── Phase 3: AI review ───────────────────────────────────────────────
-      emit(res, 'phase', { phase: 'reviewing', iteration: iterNum });
-      console.log(`[${tag}] iter ${iterNum}: reviewing…`);
+        // Fetch image as base64 for vision review
+        const imgFetchUrl = `${cfg.comfyuiUrl}/view?filename=${encodeURIComponent(image.filename)}&subfolder=${encodeURIComponent(image.subfolder ?? '')}&type=${encodeURIComponent(image.type ?? 'output')}`;
+        const imgRes = await fetch(imgFetchUrl);
+        if (!imgRes.ok) throw new Error(`Failed to fetch image for review: ${imgRes.status}`);
+        const imageBase64 = Buffer.from(await imgRes.arrayBuffer()).toString('base64');
 
-      const reviewMessages = buildReviewMessages(session.prompt, prompt, arch, session.iterations, imageBase64);
-      const review = await ollama.chatStream(cfg.ollamaModel, reviewMessages, token => {
-        emit(res, 'token', { iteration: iterNum, phase: 'review', token });
-        process.stdout.write(token);
-      });
-      process.stdout.write('\n');
+        // ── Phase 3: AI review ─────────────────────────────────────────────
+        emit(res, 'phase', { phase: 'reviewing', iteration: iterNum });
+        console.log(`[${tag}] iter ${iterNum}: reviewing…`);
 
-      const { verdict, diagnosis } = parseReview(review);
-      console.log(`[${tag}] iter ${iterNum}: verdict=${verdict} — ${diagnosis}`);
-      emit(res, 'review', { iteration: iterNum, verdict, diagnosis });
+        const reviewMessages = buildReviewMessages(session.prompt, prompt, arch, session.iterations, imageBase64);
+        const review = await ollama.chatStream(cfg.ollamaModel, reviewMessages, token => {
+          emit(res, 'token', { iteration: iterNum, phase: 'review', token });
+          process.stdout.write(token);
+        });
+        process.stdout.write('\n');
 
-      const iteration = { prompt, imageUrl, verdict, diagnosis };
-      session.iterations.push(iteration);
-      accepted = verdict === 'ACCEPT';
+        const { verdict, diagnosis } = parseReview(review);
+        console.log(`[${tag}] iter ${iterNum}: verdict=${verdict} — ${diagnosis}`);
+        emit(res, 'review', { iteration: iterNum, verdict, diagnosis });
 
-      // ── Phase 4: human review (if enabled) ──────────────────────────────
-      if (cfg.humanReview) {
-        emit(res, 'human_review', { iteration: iterNum, aiVerdict: verdict, aiDiagnosis: diagnosis });
-        console.log(`[${tag}] iter ${iterNum}: awaiting human review…`);
+        const iteration = { prompt, imageUrl, verdict, diagnosis };
+        session.iterations.push(iteration);
+        accepted = verdict === 'ACCEPT';
 
-        const decision = await waitForHumanReview(session.id);
-        if (decision.feedback) iteration.humanFeedback = decision.feedback;
+        // ── Phase 4: human review (if enabled) ────────────────────────────
+        if (cfg.humanReview) {
+          emit(res, 'human_review', { iteration: iterNum, aiVerdict: verdict, aiDiagnosis: diagnosis });
+          console.log(`[${tag}] iter ${iterNum}: awaiting human review…`);
 
-        accepted = decision.accept;
-        console.log(`[${tag}] iter ${iterNum}: human ${decision.accept ? 'ACCEPTED' : 'REJECTED'} — ${decision.feedback || 'no feedback'}`);
-        emit(res, 'human_verdict', { iteration: iterNum, accepted: decision.accept, feedback: decision.feedback });
+          const decision = await waitForHumanReview(session.id);
+          if (decision.feedback) iteration.humanFeedback = decision.feedback;
+
+          accepted = decision.accept;
+          console.log(`[${tag}] iter ${iterNum}: human ${decision.accept ? 'ACCEPTED' : 'REJECTED'} — ${decision.feedback || 'no feedback'}`);
+          emit(res, 'human_verdict', { iteration: iterNum, accepted: decision.accept, feedback: decision.feedback });
+        }
+
+        // ── Phase 5: acceptance grace period ──────────────────────────────
+        if (accepted && cfg.acceptanceGracePeriod > 0) {
+          emit(res, 'accepted_pending', { iteration: iterNum, gracePeriod: cfg.acceptanceGracePeriod });
+          console.log(`[${tag}] iter ${iterNum}: grace period ${cfg.acceptanceGracePeriod}s…`);
+          const refused = await waitForAcceptanceGrace(session.id, cfg.acceptanceGracePeriod);
+          if (refused) {
+            accepted = false;
+            iteration.verdict = 'REFUSED';
+            emit(res, 'acceptance_refused', { iteration: iterNum });
+            console.log(`[${tag}] iter ${iterNum}: acceptance refused — continuing`);
+          }
+        }
+
+        skills.record(cfg.activeModel, modelConfig.label, arch, accepted ? 'ACCEPT' : 'REJECT', diagnosis);
+        db.saveSession(session);
       }
 
-      // ── Phase 5: acceptance grace period ────────────────────────────────
-      if (accepted && cfg.acceptanceGracePeriod > 0) {
-        emit(res, 'accepted_pending', { iteration: iterNum, gracePeriod: cfg.acceptanceGracePeriod });
-        console.log(`[${tag}] iter ${iterNum}: grace period ${cfg.acceptanceGracePeriod}s…`);
+      // ── Grace period at max iterations ──────────────────────────────────
+      // When the loop ends without an accepted image, pause so the user can
+      // see the last result in the UI and refuse to keep iterating.
+      if (!accepted && cfg.acceptanceGracePeriod > 0 && session.iterations.length > 0) {
+        const lastIterNum = session.iterations.length;
+        emit(res, 'accepted_pending', { iteration: lastIterNum, gracePeriod: cfg.acceptanceGracePeriod, maxIterations: true });
+        console.log(`[${tag}] max iterations — grace period ${cfg.acceptanceGracePeriod}s`);
         const refused = await waitForAcceptanceGrace(session.id, cfg.acceptanceGracePeriod);
         if (refused) {
-          accepted = false;
-          iteration.verdict = 'REFUSED';
-          emit(res, 'acceptance_refused', { iteration: iterNum });
-          console.log(`[${tag}] iter ${iterNum}: acceptance refused — continuing`);
+          session.iterations[lastIterNum - 1].verdict = 'REFUSED';
+          emit(res, 'acceptance_refused', { iteration: lastIterNum });
+          console.log(`[${tag}] grace period refused — continuing`);
+          continueLoop = true;
         }
       }
-
-      skills.record(cfg.activeModel, modelConfig.label, arch, accepted ? 'ACCEPT' : 'REJECT', diagnosis);
-      db.saveSession(session);
-    }
+    } // end while (continueLoop)
 
     session.status = 'complete';
     console.log(`[${tag}] done — ${accepted ? 'ACCEPTED' : 'max iterations reached'} (${session.iterations.length} total)`);
