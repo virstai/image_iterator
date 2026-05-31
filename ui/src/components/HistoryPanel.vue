@@ -12,7 +12,7 @@
     <div v-else id="session-list">
       <div v-for="s in sessions" :key="s.id" class="sess-row">
         <div class="sess-info">
-          <span class="sess-desc">{{ truncate(s.description, 80) }}</span>
+          <span class="sess-desc">{{ truncate(s.prompt, 80) }}</span>
           <span class="sess-meta">{{ s.modelLabel ?? '—' }} &middot; {{ s.iterationCount }} iter &middot; {{ formatDate(s.updatedAt ?? s.createdAt) }}</span>
         </div>
         <span class="sess-status" :class="statusClass(s.status)">{{ s.status }}</span>

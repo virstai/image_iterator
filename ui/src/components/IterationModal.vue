@@ -51,6 +51,19 @@
             <button class="secondary" :disabled="submitting" @click="submitReview(false)">Reject &amp; continue</button>
           </div>
         </div>
+
+        <div v-if="iteration.acceptedPending" class="human-review">
+          <span class="hr-ai-note">Accepted — {{ iteration.gracePeriod }}s grace period active. Refuse to continue iterating.</span>
+          <div class="hr-actions">
+            <button class="danger" :disabled="submitting" @click="refuse">Refuse &amp; continue</button>
+          </div>
+        </div>
+
+        <div v-else-if="iteration.verdict === 'ACCEPT'" class="human-review">
+          <div class="hr-actions">
+            <button class="secondary" :disabled="submitting" @click="refuse">Refuse acceptance</button>
+          </div>
+        </div>
       </div>
     </div>
   </Teleport>
@@ -58,7 +71,7 @@
 
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue';
-import { submitHumanReview } from '../stores/generate.js';
+import { submitHumanReview, refuseAccepted } from '../stores/generate.js';
 
 const props = defineProps({
   iteration: { type: Object, required: true },
@@ -83,6 +96,17 @@ async function submitReview(accept) {
   try {
     await submitHumanReview(props.sessionId, accept, feedback.value.trim());
     feedback.value = '';
+    emit('close');
+  } finally {
+    submitting.value = false;
+  }
+}
+
+async function refuse() {
+  if (!props.sessionId) return;
+  submitting.value = true;
+  try {
+    await refuseAccepted(props.sessionId, props.iteration.n);
     emit('close');
   } finally {
     submitting.value = false;

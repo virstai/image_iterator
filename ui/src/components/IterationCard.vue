@@ -2,10 +2,11 @@
   <div
     class="iter-thumb"
     :class="{
-      'iter-thumb--running': isRunning,
-      'iter-thumb--accept':  iteration.verdict === 'ACCEPT',
-      'iter-thumb--reject':  iteration.verdict === 'REJECT',
-      'iter-thumb--pending': iteration.humanPending,
+      'iter-thumb--running':          isRunning,
+      'iter-thumb--accept':           iteration.verdict === 'ACCEPT' && !iteration.acceptedPending,
+      'iter-thumb--reject':           iteration.verdict === 'REJECT',
+      'iter-thumb--refused':          iteration.verdict === 'REFUSED',
+      'iter-thumb--pending':          iteration.humanPending || iteration.acceptedPending,
     }"
     @click="$emit('open')"
   >
@@ -17,7 +18,8 @@
       <div v-if="showProgress" class="thumb-progress">
         <div class="thumb-progress-fill" :style="{ width: iteration.progress + '%' }"></div>
       </div>
-      <div v-if="iteration.humanPending" class="thumb-badge">Review</div>
+      <div v-if="iteration.humanPending"    class="thumb-badge">Review</div>
+      <div v-if="iteration.acceptedPending" class="thumb-badge">Pending</div>
     </div>
     <div class="thumb-footer">
       <span class="thumb-num">#{{ iteration.n }}</span>

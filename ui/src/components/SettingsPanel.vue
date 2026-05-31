@@ -21,7 +21,12 @@
       <label>Max iterations
         <input type="number" v-model.number="form.maxIterations" min="1" max="20" placeholder="3">
       </label>
-      <label class="checkbox-label" style="justify-content:flex-end;align-self:flex-end;padding-bottom:12px">
+      <label>Acceptance grace period <span class="hint">(seconds, 0 = disabled)</span>
+        <input type="number" v-model.number="form.acceptanceGracePeriod" min="0" max="300" placeholder="10">
+      </label>
+    </div>
+    <div class="row">
+      <label class="checkbox-label" style="align-self:flex-end;padding-bottom:12px">
         <input type="checkbox" v-model="form.humanReview"> Human review after each iteration
       </label>
     </div>
@@ -45,28 +50,31 @@ const props = defineProps({
 const emit = defineEmits(['saved', 'close']);
 
 const form = reactive({
-  ollamaUrl:     '',
-  comfyuiUrl:    '',
-  ollamaModel:   '',
-  maxIterations: '',
-  humanReview:   false,
+  ollamaUrl:              '',
+  comfyuiUrl:             '',
+  ollamaModel:            '',
+  maxIterations:          '',
+  acceptanceGracePeriod:  '',
+  humanReview:            false,
 });
 
 watch(() => props.config, cfg => {
-  form.ollamaUrl     = cfg.ollamaUrl     ?? '';
-  form.comfyuiUrl    = cfg.comfyuiUrl    ?? '';
-  form.ollamaModel   = cfg.ollamaModel   ?? '';
-  form.maxIterations = cfg.maxIterations ?? '';
-  form.humanReview   = !!cfg.humanReview;
+  form.ollamaUrl             = cfg.ollamaUrl             ?? '';
+  form.comfyuiUrl            = cfg.comfyuiUrl            ?? '';
+  form.ollamaModel           = cfg.ollamaModel           ?? '';
+  form.maxIterations         = cfg.maxIterations         ?? '';
+  form.acceptanceGracePeriod = cfg.acceptanceGracePeriod ?? '';
+  form.humanReview           = !!cfg.humanReview;
 }, { immediate: true });
 
 async function save() {
   await saveConfig({
-    ollamaUrl:     form.ollamaUrl  || null,
-    comfyuiUrl:    form.comfyuiUrl || null,
-    ollamaModel:   form.ollamaModel || null,
-    maxIterations: form.maxIterations || null,
-    humanReview:   form.humanReview,
+    ollamaUrl:             form.ollamaUrl             || null,
+    comfyuiUrl:            form.comfyuiUrl            || null,
+    ollamaModel:           form.ollamaModel           || null,
+    maxIterations:         form.maxIterations         || null,
+    acceptanceGracePeriod: form.acceptanceGracePeriod !== '' ? Number(form.acceptanceGracePeriod) : null,
+    humanReview:           form.humanReview,
   });
   emit('saved');
 }

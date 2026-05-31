@@ -62,6 +62,14 @@
       </select>
     </label>
 
+    <!-- T5 encoder (chroma only) -->
+    <label v-if="showSplitFields && showClipName">T5 text encoder file
+      <select v-model="form.clipName">
+        <option value="">— select —</option>
+        <option v-for="c in assets.comfyui?.clips" :key="c" :value="c">{{ c }}</option>
+      </select>
+    </label>
+
     <!-- VAE (split) -->
     <label v-if="showSplitFields && showVaeSplit">VAE file
       <select v-model="form.vaeName">
@@ -183,7 +191,7 @@ const skillData = ref(null);
 
 const form = reactive({
   label: '', architecture: '', splitLoad: false,
-  checkpoint: '', unetName: '', clipL: '', t5xxl: '', vaeName: '',
+  checkpoint: '', unetName: '', clipL: '', t5xxl: '', clipName: '', vaeName: '',
   vae: '', useRefiner: false, refinerCheckpoint: '', refinerSwitchAt: '',
   width: '', height: '', steps: '', cfgScale: '', guidance: '',
   sampler: '', scheduler: '', negativePrompt: '',
@@ -198,6 +206,7 @@ watch(() => props.model, m => {
   form.unetName         = m.unetName         ?? '';
   form.clipL            = m.clipL            ?? '';
   form.t5xxl            = m.t5xxl            ?? '';
+  form.clipName         = m.clipName         ?? '';
   form.vaeName          = m.vaeName          ?? '';
   form.vae              = m.vae              ?? '';
   form.useRefiner       = !!m.refinerCheckpoint;
@@ -228,11 +237,12 @@ const showCheckpoint  = computed(() => ['sd15','sdxl','sd3','flux','flux2'].incl
 const showUnet        = computed(() => ['flux','flux2','chroma','anima'].includes(arch.value));
 const showClipL       = computed(() => ['flux','flux2','anima'].includes(arch.value));
 const showT5          = computed(() => isFlux.value);
+const showClipName    = computed(() => arch.value === 'chroma');
 const showVaeSplit    = computed(() => ['flux','flux2','chroma','anima'].includes(arch.value));
 const showVaeExternal = computed(() => ['sd15','sdxl','sd3'].includes(arch.value));
 const showCfg         = computed(() => ['sd15','sdxl','sd3','anima'].includes(arch.value));
 const showGuidance    = computed(() => ['flux','flux2','chroma'].includes(arch.value));
-const showNegative    = computed(() => ['sd15','sdxl','sd3','anima'].includes(arch.value));
+const showNegative    = computed(() => ['sd15','sdxl','sd3','anima','chroma'].includes(arch.value));
 const archNotes       = computed(() => props.archMeta[arch.value]?.notes ?? null);
 const outcomeRate = computed(() => {
   const o = skillData.value?.outcomes;
@@ -263,6 +273,7 @@ async function save() {
     vaeName:           (isSplit.value  && form.vaeName)     ? form.vaeName     : null,
     clipL:             (isSplit.value  && form.clipL)       ? form.clipL       : null,
     t5xxl:             (isSplit.value  && form.t5xxl)       ? form.t5xxl       : null,
+    clipName:          (isSplit.value  && form.clipName)    ? form.clipName    : null,
     vae:               form.vae              || null,
     refinerCheckpoint: (form.useRefiner && form.refinerCheckpoint) ? form.refinerCheckpoint : null,
     refinerSwitchAt:   (form.useRefiner && form.refinerSwitchAt)   ? parseFloat(form.refinerSwitchAt) : null,

@@ -37,10 +37,10 @@ const ARCH_META = {
     fields:      { checkpoint: true, vae: true, cfgScale: true, negativePrompt: true },
   },
   chroma: {
-    label:       'Chroma',
+    label:       'ChromaHD',
     loadingMode: 'split',
-    fields:      { unetName: true, vaeName: true, guidance: true },
-    notes:       'Requires ComfyUI-Chroma custom nodes (ChromaTextEncode, ChromaSampler). No text encoder file needed.',
+    fields:      { unetName: true, clipName: true, vaeName: true, guidance: true, negativePrompt: true },
+    notes:       'No custom nodes required. Needs a T5 encoder (e.g. t5xxl_flan_latest_float8_e4m3fn_scaled_stochastic.safetensors) in the text_encoders folder.',
   },
   anima: {
     label:       'Anima',

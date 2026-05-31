@@ -42,9 +42,13 @@ const modalIteration = computed(() =>
 // Reset modal when the session changes so a stale modalN can't match a new iteration
 watch(() => props.sessionId, () => { modalN.value = null; });
 
-// Auto-open when an iteration needs human review
+// Auto-open when an iteration needs human review or is in acceptance grace period
 watch(
   () => props.iterations.find(it => it.humanPending),
+  (pending) => { if (pending) modalN.value = pending.n; }
+);
+watch(
+  () => props.iterations.find(it => it.acceptedPending),
   (pending) => { if (pending) modalN.value = pending.n; }
 );
 </script>

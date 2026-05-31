@@ -7,13 +7,14 @@ const dataDir    = () => process.env.DATA_DIR    || path.join(__dirname, '../../
 const configPath = () => path.join(dataDir(), 'config.json');
 
 const GLOBAL_DEFAULTS = {
-  ollamaUrl:     'http://127.0.0.1:11434',
-  comfyuiUrl:    'http://127.0.0.1:8188',
-  ollamaModel:   '',
-  activeModel:   null,
-  maxIterations: 3,
-  humanReview:   false,
-  models:        {},
+  ollamaUrl:              'http://127.0.0.1:11434',
+  comfyuiUrl:             'http://127.0.0.1:8188',
+  ollamaModel:            '',
+  activeModel:            null,
+  maxIterations:          3,
+  humanReview:            false,
+  acceptanceGracePeriod:  10, // seconds; 0 = disabled
+  models:                 {},
 };
 
 function load() {

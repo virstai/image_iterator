@@ -1,37 +1,36 @@
 'use strict';
 
-// Chroma workflow — text-encoder-free diffusion model based on Flux architecture.
-// Requires the ComfyUI-Chroma custom node pack (ChromaTextEncode, ChromaSampler nodes).
-// Split loading only: unetName + vaeName.
+// ChromaHD workflow — all standard ComfyUI nodes, no custom node pack required.
+// Split loading: unetName + clipName (T5 encoder) + vaeName.
 const defaults = {
-  width:     1024,
-  height:    1024,
-  steps:     30,
-  guidance:  3.0,
-  sampler:   'euler',
-  scheduler: 'simple',
-  negativePrompt: '',  // Chroma does not use negative prompts
+  width:          1152,
+  height:         1152,
+  steps:          26,
+  guidance:       3.8,
+  sampler:        'euler',
+  negativePrompt: '',
 };
 
 function build(params) {
-  const p = { ...defaults, ...params };
+  const p    = { ...defaults, ...params };
   const seed = p.seed ?? Math.floor(Math.random() * 2 ** 32);
 
   return {
-    "1": { class_type: "UNETLoader",        inputs: { unet_name: p.unetName, weight_dtype: "default" } },
-    "2": { class_type: "VAELoader",          inputs: { vae_name: p.vaeName } },
-    "3": { class_type: "ChromaTextEncode",   inputs: { text: p.positivePrompt, steps: p.steps } },
-    "4": { class_type: "EmptyLatentImage",   inputs: { width: p.width, height: p.height, batch_size: 1 } },
-    "5": {
-      class_type: "ChromaSampler",
-      inputs: {
-        seed, steps: p.steps, guidance: p.guidance,
-        sampler_name: p.sampler, scheduler: p.scheduler,
-        model: ["1", 0], conditioning: ["3", 0], latent_image: ["4", 0],
-      },
-    },
-    "6": { class_type: "VAEDecode",  inputs: { samples: ["5", 0], vae: ["2", 0] } },
-    "7": { class_type: "SaveImage",  inputs: { filename_prefix: "iterator", images: ["6", 0] } },
+    "1":  { class_type: "UNETLoader",           inputs: { unet_name: p.unetName, weight_dtype: "default" } },
+    "2":  { class_type: "CLIPLoader",            inputs: { clip_name: p.clipName, type: "chroma", device: "default" } },
+    "3":  { class_type: "VAELoader",             inputs: { vae_name: p.vaeName } },
+    "4":  { class_type: "ModelSamplingAuraFlow", inputs: { model: ["1", 0], shift: 1.0 } },
+    "5":  { class_type: "T5TokenizerOptions",    inputs: { clip: ["2", 0], min_padding: 0, min_length: 0 } },
+    "6":  { class_type: "CLIPTextEncode",        inputs: { text: p.positivePrompt, clip: ["5", 0] } },
+    "7":  { class_type: "CLIPTextEncode",        inputs: { text: p.negativePrompt, clip: ["5", 0] } },
+    "8":  { class_type: "CFGGuider",             inputs: { model: ["4", 0], positive: ["6", 0], negative: ["7", 0], cfg: p.guidance } },
+    "9":  { class_type: "EmptySD3LatentImage",   inputs: { width: p.width, height: p.height, batch_size: 1 } },
+    "10": { class_type: "RandomNoise",           inputs: { noise_seed: seed } },
+    "11": { class_type: "KSamplerSelect",        inputs: { sampler_name: p.sampler } },
+    "12": { class_type: "BetaSamplingScheduler", inputs: { model: ["4", 0], steps: p.steps, alpha: 0.45, beta: 0.45 } },
+    "13": { class_type: "SamplerCustomAdvanced", inputs: { noise: ["10", 0], guider: ["8", 0], sampler: ["11", 0], sigmas: ["12", 0], latent_image: ["9", 0] } },
+    "14": { class_type: "VAEDecode",             inputs: { samples: ["13", 0], vae: ["3", 0] } },
+    "15": { class_type: "SaveImage",             inputs: { filename_prefix: "iterator", images: ["14", 0] } },
   };
 }
 

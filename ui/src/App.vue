@@ -63,11 +63,12 @@ import GenerateSection from './components/GenerateSection.vue';
 import RunSection     from './components/RunSection.vue';
 
 import { configState, loadConfig, loadAssets, setActiveModel as storeSetActiveModel } from './stores/config.js';
-import { genState, startGeneration, continueSession, loadSession, clearSession } from './stores/generate.js';
+import { genState, startGeneration, continueSession, loadSession, clearSession, connectToBroadcast } from './stores/generate.js';
 
 const activePanel = ref(null);
 
 onMounted(async () => {
+  connectToBroadcast();
   try {
     await loadConfig();
     await loadAssets();
@@ -93,9 +94,9 @@ async function onConfigChanged() {
   // no-op — store already refreshed config
 }
 
-async function onGenerate(description) {
+async function onGenerate(prompt) {
   activePanel.value = null;
-  await startGeneration(description);
+  await startGeneration(prompt);
 }
 
 async function onContinue(sessionId) {

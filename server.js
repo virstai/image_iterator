@@ -7,6 +7,7 @@ const { createServer } = require('http');
 const config = require('./src/services/config');
 const generateRoutes = require('./src/routes/generate');
 const sessionsRoutes = require('./src/routes/sessions');
+const sdapiRoutes    = require('./src/routes/sdapi');
 
 const app = express();
 const server = createServer(app);
@@ -16,6 +17,7 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 app.use('/api/generate', generateRoutes);
 app.use('/api/sessions', sessionsRoutes);
+app.use('/sdapi/v1',     sdapiRoutes);
 
 // Proxy ComfyUI image output so the browser doesn't need direct access
 app.get('/api/image', async (req, res) => {

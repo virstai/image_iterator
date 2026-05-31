@@ -144,6 +144,7 @@ button:disabled  { opacity: .45; cursor: not-allowed; }
 .iter-thumb--running             { border-color: color-mix(in srgb, var(--accent) 60%, var(--border)); }
 .iter-thumb--accept              { border-color: color-mix(in srgb, var(--accept) 60%, var(--border)); }
 .iter-thumb--reject              { border-color: color-mix(in srgb, var(--reject) 40%, var(--border)); }
+.iter-thumb--refused             { border-color: color-mix(in srgb, var(--reject) 40%, var(--border)); opacity: .6; }
 .iter-thumb--pending             { border-color: var(--accent); animation: pulse-border .9s ease-in-out infinite alternate; }
 
 @keyframes pulse-border {
@@ -181,6 +182,7 @@ button:disabled  { opacity: .45; cursor: not-allowed; }
 .verdict { margin-left: auto; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 10px; white-space: nowrap; }
 .verdict.accept  { background: var(--accept); color: #fff; }
 .verdict.reject  { background: var(--reject); color: #fff; }
+.verdict.refused { background: color-mix(in srgb, var(--reject) 50%, var(--surface)); color: var(--reject); }
 .verdict.pending { background: var(--border); color: var(--muted); }
 
 .progress-bar { height: 3px; background: var(--border); }
