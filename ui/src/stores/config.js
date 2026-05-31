@@ -51,3 +51,7 @@ export async function loadSkill(modelId) {
 export async function saveNotes(modelId, notes) {
   return api('PATCH', `/api/sessions/skills/${encodeURIComponent(modelId)}/notes`, { notes });
 }
+
+export async function refreshSkill(modelId, note = '') {
+  return api('POST', `/api/sessions/skills/${encodeURIComponent(modelId)}/refresh`, { note });
+}

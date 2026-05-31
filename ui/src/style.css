@@ -225,6 +225,19 @@ button:disabled  { opacity: .45; cursor: not-allowed; }
   padding: 10px 12px; margin-bottom: 6px; white-space: pre-wrap;
 }
 
+.skill-correction {
+  display: flex; flex-direction: column; gap: 6px; margin-top: 8px;
+}
+.skill-correction textarea {
+  width: 100%; box-sizing: border-box;
+  background: var(--surface2); border: 1px solid var(--border); color: var(--text);
+  padding: 7px 10px; border-radius: 4px; font-size: 12px; resize: vertical;
+  font-family: inherit;
+}
+.skill-correction textarea:focus { outline: none; border-color: var(--accent); }
+.skill-correction textarea:disabled { opacity: 0.5; }
+.skill-correction button { align-self: flex-end; }
+
 /* ── Model learnings (format stats) ──────────────────────────────────────── */
 .ln-row { margin-bottom: 12px; }
 .ln-row:last-child { margin-bottom: 0; }

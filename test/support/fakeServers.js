@@ -20,21 +20,39 @@ function makeFakeOllama(getVerdict) {
     let body = '';
     req.on('data', c => (body += c));
     req.on('end', () => {
-      const { messages } = JSON.parse(body);
+      const parsed  = JSON.parse(body);
+      const { messages, stream = true } = parsed;
+
       const isReview = messages.some(m =>
         typeof m.content === 'string' && m.content.toLowerCase().includes('reviewing'),
       );
-      const verdict = getVerdict();
-      const text = isReview
-        ? `Image assessed.\nVERDICT: ${verdict}\nDIAGNOSIS: ${verdict === 'ACCEPT' ? 'looks good' : 'subject not visible'}`
-        : 'a detailed landscape with mountains, high quality, sharp focus';
+      const isSkillRefresh = messages.some(m =>
+        typeof m.content === 'string' && m.content.toLowerCase().includes('knowledge base'),
+      );
 
-      res.writeHead(200, { 'Content-Type': 'application/x-ndjson' });
-      for (const word of text.split(' ')) {
-        res.write(JSON.stringify({ message: { role: 'assistant', content: word + ' ' }, done: false }) + '\n');
+      const verdict = getVerdict();
+      let text;
+      if (isSkillRefresh) {
+        text = 'SKILL\nUse short descriptive tags for best results.\n\nENFORCE\nAlways adapt to the model style.';
+      } else if (isReview) {
+        text = `Image assessed.\nVERDICT: ${verdict}\nDIAGNOSIS: ${verdict === 'ACCEPT' ? 'looks good' : 'subject not visible'}`;
+      } else {
+        text = 'a detailed landscape with mountains, high quality, sharp focus';
       }
-      res.write(JSON.stringify({ message: { role: 'assistant', content: '' }, done: true }) + '\n');
-      res.end();
+
+      if (stream === false) {
+        // Non-streaming response — used by ollama.chat (skill refresh)
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ message: { role: 'assistant', content: text }, done: true }));
+      } else {
+        // Streaming NDJSON — used by ollama.chatStream (prompt building + review)
+        res.writeHead(200, { 'Content-Type': 'application/x-ndjson' });
+        for (const word of text.split(' ')) {
+          res.write(JSON.stringify({ message: { role: 'assistant', content: word + ' ' }, done: false }) + '\n');
+        }
+        res.write(JSON.stringify({ message: { role: 'assistant', content: '' }, done: true }) + '\n');
+        res.end();
+      }
     });
   });
 }

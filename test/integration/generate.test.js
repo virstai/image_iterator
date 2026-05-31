@@ -282,3 +282,43 @@ test('DELETE /api/generate/sessions/:id removes the session', async () => {
   const get = await fetch(`${base()}/api/generate/sessions/${sessionId}`);
   assert.equal(get.status, 404);
 });
+
+// ── POST /api/sessions/skills/:modelId/refresh ────────────────────────────────
+
+test('POST /api/sessions/skills/test-sd15/refresh returns updated skill data', async () => {
+  // Run a session first so outcome data exists for the model
+  reviewVerdict = 'ACCEPT';
+  await collectSSE(`${base()}/api/generate`, { prompt: 'skill refresh seed' });
+
+  const res = await fetch(`${base()}/api/sessions/skills/test-sd15/refresh`, {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body:    JSON.stringify({}),
+  });
+  assert.equal(res.status, 200);
+  const data = await res.json();
+  assert.ok(data.skill,          'should contain updated skill text');
+  assert.ok(data.skillUpdatedAt, 'should have a skillUpdatedAt timestamp');
+});
+
+test('POST /api/sessions/skills/test-sd15/refresh with correction note updates skill', async () => {
+  const res = await fetch(`${base()}/api/sessions/skills/test-sd15/refresh`, {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body:    JSON.stringify({ note: 'Always use danbooru tags, never natural language.' }),
+  });
+  assert.equal(res.status, 200);
+  const data = await res.json();
+  assert.ok(data.skill, 'should return updated skill data after correction note');
+});
+
+test('POST /api/sessions/skills/unknown-model/refresh returns 404', async () => {
+  const res = await fetch(`${base()}/api/sessions/skills/unknown-model/refresh`, {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body:    JSON.stringify({}),
+  });
+  assert.equal(res.status, 404);
+  const body = await res.json();
+  assert.ok(body.error);
+});

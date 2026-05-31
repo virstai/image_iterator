@@ -25,23 +25,20 @@ test('get returns null when no skill file exists', () => {
 });
 
 test('record creates a skill file with outcome data', () => {
-  skills.record('m1', 'Model 1', 'sd15', 'ACCEPT', 'looks good');
+  skills.record('m1', 'Model 1', 'sd15', 'ACCEPT');
   const data = skills.get('m1');
   assert.ok(data);
   assert.equal(data.outcomes.accepts, 1);
   assert.equal(data.outcomes.rejects, 0);
-  assert.equal(data.outcomes.notes.length, 1);
-  assert.equal(data.outcomes.notes[0].verdict, 'ACCEPT');
 });
 
 test('record accumulates accepts and rejects', () => {
-  skills.record('m2', 'Model 2', 'flux', 'REJECT', 'missing element');
-  skills.record('m2', 'Model 2', 'flux', 'REJECT', 'wrong style');
-  skills.record('m2', 'Model 2', 'flux', 'ACCEPT', 'looks great');
+  skills.record('m2', 'Model 2', 'flux', 'REJECT');
+  skills.record('m2', 'Model 2', 'flux', 'REJECT');
+  skills.record('m2', 'Model 2', 'flux', 'ACCEPT');
   const data = skills.get('m2');
   assert.equal(data.outcomes.accepts, 1);
   assert.equal(data.outcomes.rejects, 2);
-  assert.equal(data.outcomes.notes.length, 3);
 });
 
 test('getSummary returns null when no data exists', () => {

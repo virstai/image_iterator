@@ -6,6 +6,7 @@ const config    = require('../services/config');
 const comfyui   = require('../services/comfyui');
 const ollama    = require('../services/ollama');
 const skills    = require('../services/skills');
+const { refreshSkill } = require('../services/skillRefresher');
 const { architectures, archMeta, getDefaults } = require('../workflows');
 
 // GET /api/sessions/config
@@ -59,6 +60,22 @@ router.delete('/models/:id', (req, res) => {
 // GET /api/sessions/skills/:modelId
 router.get('/skills/:modelId', (req, res) => {
   res.json(skills.get(req.params.modelId) ?? {});
+});
+
+// POST /api/sessions/skills/:modelId/refresh — manually trigger a skill refresh with an optional correction note
+router.post('/skills/:modelId/refresh', async (req, res) => {
+  const { note = '' } = req.body;
+  const cfg = config.load();
+  const modelConfig = cfg.models?.[req.params.modelId];
+  if (!modelConfig) return res.status(404).json({ error: 'Model not found' });
+  if (!cfg.ollamaModel) return res.status(400).json({ error: 'No Ollama model configured' });
+
+  try {
+    await refreshSkill(req.params.modelId, modelConfig.label, modelConfig.architecture, cfg.ollamaModel, note.trim());
+    res.json(skills.get(req.params.modelId) ?? {});
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // PATCH /api/sessions/skills/:modelId/notes

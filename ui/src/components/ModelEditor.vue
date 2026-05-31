@@ -149,6 +149,18 @@
       <div v-else class="skill-text" style="color:var(--muted)">No skill synthesised yet — will be generated after the first session.</div>
       <div v-if="skillData.skillUpdatedAt" class="hint">Last updated {{ formatDate(skillData.skillUpdatedAt) }}</div>
 
+      <div class="skill-correction">
+        <textarea
+          v-model="correctionNote"
+          rows="3"
+          placeholder="Describe what the agent got wrong or should change (optional)…"
+          :disabled="refreshing"
+        ></textarea>
+        <button class="small primary" :disabled="refreshing" @click="doRefreshSkill">
+          {{ refreshing ? 'Refreshing…' : 'Refresh skill' }}
+        </button>
+      </div>
+
       <template v-if="skillData.outcomes && (skillData.outcomes.accepts + skillData.outcomes.rejects) > 0">
         <h3 style="margin-top:14px">Outcomes</h3>
         <div class="ln-header">
@@ -198,7 +210,7 @@
 
 <script setup>
 import { reactive, computed, watch, onMounted, ref } from 'vue';
-import { saveModel, deleteModel, loadSkill, saveNotes, configState } from '../stores/config.js';
+import { saveModel, deleteModel, loadSkill, saveNotes, refreshSkill as apiRefreshSkill, configState } from '../stores/config.js';
 
 const props = defineProps({
   modelId:  { type: String, default: null },
@@ -208,10 +220,12 @@ const props = defineProps({
 });
 const emit = defineEmits(['saved', 'deleted', 'cancel']);
 
-const skillData  = ref(null);
-const localNotes = ref([]);
-const addType    = ref('enforce');
-const addText    = ref('');
+const skillData      = ref(null);
+const localNotes     = ref([]);
+const addType        = ref('enforce');
+const addText        = ref('');
+const correctionNote = ref('');
+const refreshing     = ref(false);
 
 const form = reactive({
   label: '', architecture: '', splitLoad: false,
@@ -291,6 +305,21 @@ function formatDate(iso) {
 
 function genId() {
   return Date.now().toString(36) + Math.random().toString(36).slice(2);
+}
+
+async function doRefreshSkill() {
+  if (refreshing.value) return;
+  refreshing.value = true;
+  try {
+    const data = await apiRefreshSkill(props.modelId, correctionNote.value.trim());
+    skillData.value  = data;
+    localNotes.value = (data.notes ?? []).map(n => ({ ...n }));
+    correctionNote.value = '';
+  } catch (err) {
+    alert(`Skill refresh failed: ${err.message}`);
+  } finally {
+    refreshing.value = false;
+  }
 }
 
 async function persistNotes() {
