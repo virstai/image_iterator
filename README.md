@@ -11,7 +11,7 @@ An iterative image generation tool that uses **Ollama** to write and refine prom
 ## Install
 
 ```bash
-git clone <repo-url>
+git clone https://github.com/virstai/image_iterator.git
 cd image_iterator
 npm install
 ```
@@ -79,7 +79,7 @@ npm run dev
 | `flux2` | Flux 2 | Same as Flux.1 |
 | `sd3` | SD 3 / SD 3.5 | Checkpoint + VAE |
 | `chroma` | ChromaHD | Split (UNet + T5 encoder + VAE); standard ComfyUI nodes only — no custom node pack required |
-| `anima` | Anima | Requires Qwen-3 text encoder and Qwen Image VAE; `er_sde` sampler via RES4LYF nodes |
+| `anima` | Anima | Requires Qwen-3 text encoder and Qwen Image VAE; uses `er_sde` sampler (available in recent ComfyUI builds or via RES4LYF nodes) |
 
 ## Settings
 
@@ -139,7 +139,7 @@ All three SSE endpoints emit the following events:
 
 | Event | Payload |
 |---|---|
-| `session` | `{ id }` — session ID |
+| `session` | `{ id, prompt }` — session ID and prompt (`resume: true` instead of `prompt` when resuming) |
 | `phase` | `{ phase, iteration }` — current phase name |
 | `token` | `{ iteration, phase, token }` — streaming token from Ollama |
 | `prompt` | `{ iteration, prompt }` — finalised ComfyUI prompt |
@@ -148,7 +148,7 @@ All three SSE endpoints emit the following events:
 | `review` | `{ iteration, verdict, diagnosis }` — AI review result |
 | `human_review` | `{ iteration, aiVerdict, aiDiagnosis }` — waiting for human input |
 | `human_verdict` | `{ iteration, accepted, feedback }` |
-| `accepted_pending` | `{ iteration, gracePeriod }` — accepted; grace period started |
+| `accepted_pending` | `{ iteration, gracePeriod, maxIterations? }` — grace period started; `maxIterations: true` when triggered at the end of a rejected batch |
 | `acceptance_refused` | `{ iteration }` — acceptance refused; loop continues |
 | `done` | `{ iterations, accepted, imageUrl, sessionId, prompt }` — final result |
 | `error` | `{ message }` |
@@ -168,6 +168,10 @@ All three SSE endpoints emit the following events:
 Marks the most recent accepted iteration as refused. If called during an active grace period the timer is cancelled and the loop continues immediately. Safe to call on completed sessions (use **Continue session** afterwards to run more iterations).
 
 No request body required.
+
+### Broadcast event stream
+
+**`GET /api/generate/events`** — server-sent event stream that broadcasts every generation event to all connected clients, regardless of whether the session was started from the UI or via the SDAPI. The browser UI subscribes to this on load to show live progress for externally-triggered sessions.
 
 ### Sessions
 
@@ -200,12 +204,17 @@ The server exposes a partial [Automatic1111](https://github.com/AUTOMATIC1111/st
 
 | Endpoint | Method | Description |
 |---|---|---|
-| `/sdapi/v1/txt2img` | POST | Generate an image (blocking — waits for the full iteration loop) |
+| `/sdapi/v1/txt2img` | POST | Generate an image (blocking — waits for the full iteration loop including any grace period) |
 | `/sdapi/v1/progress` | GET | Poll generation progress during a running request |
+| `/sdapi/v1/interrupt` | POST | Abort the current generation |
 | `/sdapi/v1/sd-models` | GET | List configured models |
 | `/sdapi/v1/options` | GET | Get active model as `sd_model_checkpoint` |
 | `/sdapi/v1/options` | POST | Set active model via `sd_model_checkpoint` |
 | `/sdapi/v1/samplers` | GET | List supported samplers |
+| `/sdapi/v1/schedulers` | GET | List supported schedulers (ComfyUI scheduler names) |
+| `/sdapi/v1/upscalers` | GET | Stub — returns `[{name:"None"}]`; upscaling not supported |
+| `/sdapi/v1/latent-upscale-modes` | GET | Stub — returns `[]` |
+| `/sdapi/v1/sd-vae` | GET | Stub — returns `[]`; VAE switching not supported |
 
 ### txt2img
 
@@ -220,7 +229,8 @@ The server exposes a partial [Automatic1111](https://github.com/AUTOMATIC1111/st
 | `steps` | Number of sampling steps |
 | `cfg_scale` | Guidance / CFG scale |
 | `width` / `height` | Image dimensions |
-| `sampler_name` | Sampler (see `/sdapi/v1/samplers` for supported names) |
+| `sampler_name` | Sampler (see `/sdapi/v1/samplers`; unrecognised names use the model's workflow default) |
+| `scheduler` | Scheduler name (see `/sdapi/v1/schedulers`; omit or send `""` to use the model's workflow default) |
 | `seed` | Seed (`-1` for random; incremented across `batch_size`) |
 | `batch_size` | Images per batch |
 | `n_iter` | Number of batches |
@@ -268,8 +278,9 @@ The `sd_model_checkpoint` value accepts a model label (`ChromaHD`), ID (`chroma`
 
 ### Notes
 
-- The acceptance grace period is bypassed for SDAPI requests — the response is returned as soon as the iteration loop concludes.
-- `cfg_scale` is passed as both `guidance` and `cfgScale`; each architecture uses whichever applies.
+- The acceptance grace period applies to SDAPI requests just as it does to UI-triggered sessions. While the grace period is active the browser UI (connected via `GET /api/generate/events`) shows the result and a **Refuse & continue** button. The SDAPI response is not returned until the grace period expires or the user refuses.
+- Unrecognised `sd_model_checkpoint` values (e.g. when a client sends back the backend name rather than a model ID) fall back to the active model.
+- `cfg_scale` is forwarded as both `guidance` and `cfgScale`; each architecture uses whichever applies.
 - `img2img`, PNG info, interrogate, and training endpoints are not implemented.
 
 ---
