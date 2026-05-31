@@ -130,9 +130,9 @@ async function fetchBase64(host, imageUrl) {
   return Buffer.from(await res.arrayBuffer()).toString('base64');
 }
 
-// ── POST /sdapi/v1/txt2img ────────────────────────────────────────────────────
+// ── Shared generation handler (used by both txt2img and img2img) ─────────────
 
-router.post('/txt2img', async (req, res) => {
+async function handleGenerationRequest(req, res) {
   const cfg = config.load();
   if (!cfg.ollamaModel) return res.status(400).json({ error: 'No Ollama model configured.' });
   if (!cfg.activeModel) return res.status(400).json({ error: 'No active model selected.' });
@@ -273,7 +273,16 @@ router.post('/txt2img', async (req, res) => {
   });
 
   res.json({ images, parameters: req.body, info });
-});
+}
+
+// ── POST /sdapi/v1/txt2img ────────────────────────────────────────────────────
+router.post('/txt2img', handleGenerationRequest);
+
+// ── POST /sdapi/v1/img2img ────────────────────────────────────────────────────
+// Marinara's illustrator sends img2img when a reference image is provided.
+// We don't do true img2img — init_images and denoising_strength are ignored
+// and the request is handled as a normal txt2img generation.
+router.post('/img2img', handleGenerationRequest);
 
 // ── GET /sdapi/v1/progress ────────────────────────────────────────────────────
 

@@ -159,7 +159,7 @@ async function runLoop(session, cfg, modelConfig, overrides, res) {
           }
         }
 
-        skills.record(cfg.activeModel, modelConfig.label, arch, accepted ? 'ACCEPT' : 'REJECT', diagnosis);
+        skills.record(cfg.activeModel, modelConfig.label, arch, accepted ? 'ACCEPT' : 'REJECT');
         db.saveSession(session);
       }
 
@@ -389,6 +389,10 @@ router.get('/events', (req, res) => {
 
 // ── Skill refresh (background, after each session) ────────────────────────────
 
+function genId() {
+  return Date.now().toString(36) + Math.random().toString(36).slice(2);
+}
+
 async function refreshSkill(modelId, modelLabel, arch, ollamaModel) {
   const data = skills.get(modelId);
   if (!data) return;
@@ -397,18 +401,22 @@ async function refreshSkill(modelId, modelLabel, arch, ollamaModel) {
   if (!o || (o.accepts + o.rejects) === 0) return;
 
   const total     = o.accepts + o.rejects;
-  const recent    = (o.notes ?? []).slice(-8).map(n => `${n.verdict}: "${n.diagnosis}"`).join('; ');
-  const statsText = `${o.accepts}/${total} accepted — ${recent}`;
+  const statsText = `${o.accepts}/${total} accepted`;
 
   const messages = [
     {
       role: 'system',
       content:
         `${LOCAL_PREAMBLE}\n\n` +
-        `You maintain a prompt engineering skill document for a specific image generation model. ` +
-        `Synthesise a concise guide (3–6 sentences) that captures what prompt styles and content work best for this model, ` +
-        `what to avoid, and any specific wording or structural techniques that improve results. ` +
-        `Be specific and actionable. Output only the skill text — no headers, no bullet points, no formatting.`,
+        `You maintain a prompt engineering knowledge base for a specific image generation model. ` +
+        `Based on the outcome data, produce the following sections:\n\n` +
+        `SKILL\n` +
+        `<3–6 sentence guide: what styles work best, what to avoid, specific techniques>\n\n` +
+        `ENFORCE\n` +
+        `<one style enforcement rule per line, e.g. "Adapt photorealistic requests to anime/manga style". Omit section if none apply.>\n\n` +
+        `BLACKLIST\n` +
+        `<comma-separated words that consistently cause poor results and should be replaced with better alternatives. Omit section if none.>\n\n` +
+        `Use exactly those section headers. Output nothing else.`,
     },
     {
       role: 'user',
@@ -416,12 +424,46 @@ async function refreshSkill(modelId, modelLabel, arch, ollamaModel) {
         `Model: ${modelLabel} (architecture: ${arch})\n\n` +
         `Outcome data:\n${statsText}\n\n` +
         `Current skill text:\n${data.skill ?? 'None yet — write a fresh one.'}\n\n` +
-        `Write an updated skill text:`,
+        `Write updated skill and discovery notes:`,
     },
   ];
 
-  const newSkill = await ollama.chat(ollamaModel, messages);
-  skills.setSkill(modelId, newSkill.trim());
+  const raw = await ollama.chat(ollamaModel, messages);
+
+  // Parse sections
+  const sections = {};
+  let current = null;
+  for (const line of raw.split('\n')) {
+    const t = line.trim();
+    if (t === 'SKILL' || t === 'ENFORCE' || t === 'BLACKLIST') { current = t; sections[current] = []; }
+    else if (current && t) sections[current].push(t);
+  }
+
+  const newSkill = (sections.SKILL ?? []).join('\n').trim() || raw.trim();
+  skills.setSkill(modelId, newSkill);
+
+  const enforceLines   = sections.ENFORCE ?? [];
+  const blacklistWords = (sections.BLACKLIST ?? []).join(',').split(',').map(w => w.trim()).filter(Boolean);
+
+  if (enforceLines.length || blacklistWords.length) {
+    const latest    = skills.get(modelId);
+    const userNotes = (latest.notes ?? []).filter(n => !n.auto);
+    const autoNotes = (latest.notes ?? []).filter(n => n.auto);
+    const merged    = [];
+
+    for (const text of enforceLines) {
+      const prev = autoNotes.find(n => n.type === 'enforce' && n.text === text);
+      merged.push({ id: prev?.id ?? genId(), type: 'enforce', text, enabled: prev?.enabled ?? false, auto: true });
+    }
+
+    if (blacklistWords.length) {
+      const prev = autoNotes.find(n => n.type === 'blacklist');
+      merged.push({ id: prev?.id ?? genId(), type: 'blacklist', words: blacklistWords, enabled: prev?.enabled ?? false, auto: true });
+    }
+
+    skills.saveNotes(modelId, [...userNotes, ...merged]);
+  }
+
   console.log(`[skills] updated skill for ${modelId}`);
 }
 

@@ -47,3 +47,7 @@ export async function setActiveModel(id) {
 export async function loadSkill(modelId) {
   return api('GET', `/api/sessions/skills/${encodeURIComponent(modelId)}`);
 }
+
+export async function saveNotes(modelId, notes) {
+  return api('PATCH', `/api/sessions/skills/${encodeURIComponent(modelId)}/notes`, { notes });
+}

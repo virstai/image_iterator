@@ -156,15 +156,36 @@
           <div class="ln-bar"><div class="ln-fill" :style="{ width: outcomeRate + '%' }"></div></div>
           <span class="ln-pct">{{ outcomeRate }}%</span>
         </div>
-        <ul class="ln-notes">
-          <li
-            v-for="(note, i) in (skillData.outcomes.notes ?? []).slice(-4).reverse()"
-            :key="i"
-            class="ln-note"
-            :class="note.verdict === 'ACCEPT' ? 'ln-accept' : 'ln-reject'"
-          >{{ note.verdict === 'ACCEPT' ? '✓' : '✗' }} {{ note.diagnosis }}</li>
-        </ul>
       </template>
+    </div>
+
+    <!-- Notes section -->
+    <div v-if="modelId" class="skill-section">
+      <hr>
+      <h3>Notes</h3>
+      <p v-if="!localNotes.length" class="hint">No notes yet — discoveries will appear here after sessions.</p>
+      <div v-for="note in localNotes" :key="note.id" class="note-row">
+        <label class="note-toggle">
+          <input type="checkbox" :checked="note.enabled" @change="toggleNote(note.id)">
+          <span v-if="note.type === 'enforce'" class="note-text">{{ note.text }}</span>
+          <span v-else class="note-text"><strong>Blacklist:</strong> {{ (note.words ?? []).join(', ') }}</span>
+        </label>
+        <span v-if="note.auto" class="note-auto">auto</span>
+        <button class="small danger" @click="deleteNote(note.id)">×</button>
+      </div>
+      <div class="note-add">
+        <select v-model="addType" class="note-add-select">
+          <option value="enforce">Style enforcement</option>
+          <option value="blacklist">Blacklist words</option>
+        </select>
+        <input
+          v-model="addText"
+          class="note-add-input"
+          :placeholder="addType === 'enforce' ? 'e.g. Adapt photorealistic requests to anime style' : 'comma-separated words'"
+          @keydown.enter="addNote"
+        >
+        <button class="small primary" @click="addNote">Add</button>
+      </div>
     </div>
 
     <div class="panel-actions">
@@ -177,7 +198,7 @@
 
 <script setup>
 import { reactive, computed, watch, onMounted, ref } from 'vue';
-import { saveModel, deleteModel, loadSkill, configState } from '../stores/config.js';
+import { saveModel, deleteModel, loadSkill, saveNotes, configState } from '../stores/config.js';
 
 const props = defineProps({
   modelId:  { type: String, default: null },
@@ -187,7 +208,10 @@ const props = defineProps({
 });
 const emit = defineEmits(['saved', 'deleted', 'cancel']);
 
-const skillData = ref(null);
+const skillData  = ref(null);
+const localNotes = ref([]);
+const addType    = ref('enforce');
+const addText    = ref('');
 
 const form = reactive({
   label: '', architecture: '', splitLoad: false,
@@ -224,7 +248,11 @@ watch(() => props.model, m => {
 
 watch(() => props.modelId, async id => {
   skillData.value = null;
-  if (id) skillData.value = await loadSkill(id).catch(() => null);
+  localNotes.value = [];
+  if (id) {
+    skillData.value = await loadSkill(id).catch(() => null);
+    localNotes.value = (skillData.value?.notes ?? []).map(n => ({ ...n }));
+  }
 }, { immediate: true });
 
 const arch = computed(() => form.architecture);
@@ -259,6 +287,39 @@ function archDefaultVal(key) {
 function formatDate(iso) {
   const d = new Date(iso);
   return `${d.toLocaleDateString()} ${d.toLocaleTimeString()}`;
+}
+
+function genId() {
+  return Date.now().toString(36) + Math.random().toString(36).slice(2);
+}
+
+async function persistNotes() {
+  const data = await saveNotes(props.modelId, localNotes.value);
+  skillData.value = data;
+}
+
+async function toggleNote(id) {
+  const note = localNotes.value.find(n => n.id === id);
+  if (note) { note.enabled = !note.enabled; await persistNotes(); }
+}
+
+async function deleteNote(id) {
+  localNotes.value = localNotes.value.filter(n => n.id !== id);
+  await persistNotes();
+}
+
+async function addNote() {
+  const text = addText.value.trim();
+  if (!text) return;
+  const note = { id: genId(), type: addType.value, enabled: false, auto: false };
+  if (addType.value === 'enforce') {
+    note.text = text;
+  } else {
+    note.words = text.split(',').map(w => w.trim()).filter(Boolean);
+  }
+  localNotes.value.push(note);
+  addText.value = '';
+  await persistNotes();
 }
 
 async function save() {

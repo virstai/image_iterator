@@ -61,6 +61,16 @@ router.get('/skills/:modelId', (req, res) => {
   res.json(skills.get(req.params.modelId) ?? {});
 });
 
+// PATCH /api/sessions/skills/:modelId/notes
+router.patch('/skills/:modelId/notes', (req, res) => {
+  try {
+    skills.saveNotes(req.params.modelId, req.body.notes ?? []);
+    res.json(skills.get(req.params.modelId) ?? {});
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ── Architecture metadata ──────────────────────────────────────────────────
 
 // GET /api/sessions/architectures

@@ -205,6 +205,7 @@ The server exposes a partial [Automatic1111](https://github.com/AUTOMATIC1111/st
 | Endpoint | Method | Description |
 |---|---|---|
 | `/sdapi/v1/txt2img` | POST | Generate an image (blocking — waits for the full iteration loop including any grace period) |
+| `/sdapi/v1/img2img` | POST | Accepted for compatibility; treated as txt2img — `init_images` and `denoising_strength` are ignored |
 | `/sdapi/v1/progress` | GET | Poll generation progress during a running request |
 | `/sdapi/v1/interrupt` | POST | Abort the current generation |
 | `/sdapi/v1/sd-models` | GET | List configured models |
@@ -281,7 +282,8 @@ The `sd_model_checkpoint` value accepts a model label (`ChromaHD`), ID (`chroma`
 - The acceptance grace period applies to SDAPI requests just as it does to UI-triggered sessions. While the grace period is active the browser UI (connected via `GET /api/generate/events`) shows the result and a **Refuse & continue** button. The SDAPI response is not returned until the grace period expires or the user refuses.
 - Unrecognised `sd_model_checkpoint` values (e.g. when a client sends back the backend name rather than a model ID) fall back to the active model.
 - `cfg_scale` is forwarded as both `guidance` and `cfgScale`; each architecture uses whichever applies.
-- `img2img`, PNG info, interrogate, and training endpoints are not implemented.
+- `POST /sdapi/v1/img2img` is accepted (clients such as Marinara's illustrator use it when a reference image is provided) but is treated identically to `txt2img` — `init_images` and `denoising_strength` are ignored and the request runs the normal iteration loop.
+- PNG info, interrogate, and training endpoints are not implemented.
 
 ---
 

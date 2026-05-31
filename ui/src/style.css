@@ -247,14 +247,35 @@ button:disabled  { opacity: .45; cursor: not-allowed; }
 .ln-pct {
   font-size: 11px; color: var(--muted); min-width: 30px; text-align: right;
 }
-.ln-notes {
-  list-style: none; display: flex; flex-direction: column; gap: 2px; padding-left: 8px;
+/* ── Model notes ──────────────────────────────────────────────────────────── */
+.note-row {
+  display: flex; align-items: center; gap: 8px; padding: 6px 0;
+  border-bottom: 1px solid var(--border);
 }
-.ln-note {
-  font-size: 11px; line-height: 1.4; color: var(--muted);
+.note-row:last-of-type { border-bottom: none; }
+.note-toggle {
+  display: flex; align-items: flex-start; gap: 8px;
+  flex: 1; font-size: 13px; color: var(--text); cursor: pointer;
+  flex-direction: row;
 }
-.ln-note.ln-accept { color: var(--accept); }
-.ln-note.ln-reject { color: var(--reject); }
+.note-toggle input[type="checkbox"] { margin-top: 2px; accent-color: var(--accent); flex-shrink: 0; }
+.note-text { line-height: 1.4; }
+.note-auto {
+  font-size: 10px; color: var(--muted); border: 1px solid var(--border);
+  border-radius: 3px; padding: 1px 4px; white-space: nowrap; flex-shrink: 0;
+}
+.note-add {
+  display: flex; gap: 6px; align-items: center; margin-top: 10px;
+}
+.note-add-select {
+  background: var(--surface2); border: 1px solid var(--border); color: var(--text);
+  padding: 5px 6px; border-radius: 4px; font-size: 12px; flex-shrink: 0;
+}
+.note-add-input {
+  flex: 1; background: var(--surface2); border: 1px solid var(--border); color: var(--text);
+  padding: 5px 8px; border-radius: 4px; font-size: 12px;
+}
+.note-add-input:focus { outline: none; border-color: var(--accent); }
 
 /* ── Human review panel ───────────────────────────────────────────────────── */
 .human-review {
