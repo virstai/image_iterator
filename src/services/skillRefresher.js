@@ -26,10 +26,20 @@ async function refreshSkill(modelId, modelLabel, arch, ollamaModel, correctionNo
     ? `${o.accepts}/${o.accepts + o.rejects} accepted`
     : 'No session data yet.';
 
+  const currentAutoNotes = (data.notes ?? []).filter(n => n.auto);
+  const currentEnforce   = currentAutoNotes.filter(n => n.type === 'enforce').map(n => n.text);
+  const currentBlacklist = currentAutoNotes.filter(n => n.type === 'blacklist').flatMap(n => n.words ?? []);
+
   const userContent =
     `Model: ${modelLabel} (architecture: ${arch})\n\n` +
     `Outcome data:\n${statsText}\n\n` +
     `Current skill text:\n${data.skill ?? 'None yet — write a fresh one.'}\n\n` +
+    (currentEnforce.length
+      ? `Currently active enforce rules (keep if still valid, update or omit if outdated):\n${currentEnforce.map(t => `- ${t}`).join('\n')}\n\n`
+      : '') +
+    (currentBlacklist.length
+      ? `Currently blacklisted words (keep these unless definitely no longer problematic): ${currentBlacklist.join(', ')}\n\n`
+      : '') +
     (correctionNote
       ? `User correction (takes priority over inferred patterns — apply it directly):\n${correctionNote}\n\n`
       : '') +
@@ -75,14 +85,22 @@ async function refreshSkill(modelId, modelLabel, arch, ollamaModel, correctionNo
     const autoNotes = (latest.notes ?? []).filter(n => n.auto);
     const merged    = [];
 
-    for (const text of enforceLines) {
-      const prev = autoNotes.find(n => n.type === 'enforce' && n.text === text);
-      merged.push({ id: prev?.id ?? genId(), type: 'enforce', text, enabled: prev?.enabled ?? false, auto: true });
+    const anyEnforceEnabled = autoNotes.some(n => n.type === 'enforce' && n.enabled);
+    if (enforceLines.length) {
+      for (const text of enforceLines) {
+        const prev = autoNotes.find(n => n.type === 'enforce' && n.text === text);
+        merged.push({ id: prev?.id ?? genId(), type: 'enforce', text, enabled: prev?.enabled ?? anyEnforceEnabled, auto: true });
+      }
+    } else {
+      merged.push(...autoNotes.filter(n => n.type === 'enforce'));
     }
 
     if (blacklistWords.length) {
       const prev = autoNotes.find(n => n.type === 'blacklist');
-      merged.push({ id: prev?.id ?? genId(), type: 'blacklist', words: blacklistWords, enabled: prev?.enabled ?? false, auto: true });
+      const words = prev?.words?.length ? [...new Set([...prev.words, ...blacklistWords])] : blacklistWords;
+      merged.push({ id: prev?.id ?? genId(), type: 'blacklist', words, enabled: prev?.enabled ?? false, auto: true });
+    } else {
+      merged.push(...autoNotes.filter(n => n.type === 'blacklist'));
     }
 
     skills.saveNotes(modelId, [...userNotes, ...merged]);
