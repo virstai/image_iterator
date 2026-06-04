@@ -10,10 +10,10 @@
       <label>ComfyUI URL    <input type="url"    v-model="form.comfyuiUrl" placeholder="http://host:8188"></label>
     </div>
 
-    <label>Ollama model (prompt building &amp; review)
-      <select v-model="form.ollamaModel">
+    <label>LLM model (prompt building &amp; review)
+      <select v-model="form.llmModel">
         <option value="">— select —</option>
-        <option v-for="m in assets.ollama" :key="m" :value="m">{{ m }}</option>
+        <option v-for="m in assets.llm" :key="m" :value="m">{{ m }}</option>
       </select>
     </label>
 
@@ -45,23 +45,23 @@ import { saveConfig, loadAssets } from '../stores/config.js';
 
 const props = defineProps({
   config: { type: Object, default: () => ({}) },
-  assets: { type: Object, default: () => ({ ollama: [] }) },
+  assets: { type: Object, default: () => ({ llm: [] }) },
 });
 const emit = defineEmits(['saved', 'close']);
 
 const form = reactive({
-  ollamaUrl:              '',
-  comfyuiUrl:             '',
-  ollamaModel:            '',
-  maxIterations:          '',
-  acceptanceGracePeriod:  '',
-  humanReview:            false,
+  ollamaUrl:             '',
+  comfyuiUrl:            '',
+  llmModel:              '',
+  maxIterations:         '',
+  acceptanceGracePeriod: '',
+  humanReview:           false,
 });
 
 watch(() => props.config, cfg => {
   form.ollamaUrl             = cfg.ollamaUrl             ?? '';
   form.comfyuiUrl            = cfg.comfyuiUrl            ?? '';
-  form.ollamaModel           = cfg.ollamaModel           ?? '';
+  form.llmModel              = cfg.llmModel              ?? '';
   form.maxIterations         = cfg.maxIterations         ?? '';
   form.acceptanceGracePeriod = cfg.acceptanceGracePeriod ?? '';
   form.humanReview           = !!cfg.humanReview;
@@ -71,7 +71,7 @@ async function save() {
   await saveConfig({
     ollamaUrl:             form.ollamaUrl             || null,
     comfyuiUrl:            form.comfyuiUrl            || null,
-    ollamaModel:           form.ollamaModel           || null,
+    llmModel:              form.llmModel              || null,
     maxIterations:         form.maxIterations         || null,
     acceptanceGracePeriod: form.acceptanceGracePeriod !== '' ? Number(form.acceptanceGracePeriod) : null,
     humanReview:           form.humanReview,

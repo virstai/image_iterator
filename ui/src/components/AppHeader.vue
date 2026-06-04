@@ -1,6 +1,6 @@
 <template>
   <header>
-    <h1>Image Iterator</h1>
+    <h1>ComfyRefinery</h1>
     <div class="header-right">
       <select
         :value="config.activeModel ?? ''"

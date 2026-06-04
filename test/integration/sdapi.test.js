@@ -36,7 +36,8 @@ before(async () => {
   fs.writeFileSync(path.join(tmpDir, 'config.json'), JSON.stringify({
     ollamaUrl:             `http://127.0.0.1:${ollamaPort}`,
     comfyuiUrl:            `http://127.0.0.1:${comfyPort}`,
-    ollamaModel:           'test-model',
+    llmModel:              'test-model',
+    llmProvider:           'ollama',
     activeModel:           'test-sd15',
     maxIterations:         2,
     humanReview:           false,

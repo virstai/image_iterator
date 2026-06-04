@@ -79,6 +79,7 @@ import { submitHumanReview, refuseAccepted } from '../stores/generate.js';
 
 const props = defineProps({
   iteration: { type: Object, required: true },
+  stepIndex: { type: Number, default: 0 },
   sessionId: { type: String, default: null },
 });
 const emit = defineEmits(['close']);
@@ -98,7 +99,7 @@ async function submitReview(accept) {
   if (!props.sessionId) return;
   submitting.value = true;
   try {
-    await submitHumanReview(props.sessionId, accept, feedback.value.trim());
+    await submitHumanReview(props.sessionId, props.stepIndex, accept, feedback.value.trim());
     feedback.value = '';
     emit('close');
   } finally {
@@ -110,7 +111,7 @@ async function refuse() {
   if (!props.sessionId) return;
   submitting.value = true;
   try {
-    await refuseAccepted(props.sessionId, props.iteration.n);
+    await refuseAccepted(props.sessionId, props.stepIndex, props.iteration.n);
     emit('close');
   } finally {
     submitting.value = false;

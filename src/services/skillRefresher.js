@@ -1,7 +1,8 @@
 'use strict';
 
-const ollama = require('./ollama');
+const llm    = require('./llm');
 const skills = require('./skills');
+const config = require('./config');
 
 const LOCAL_PREAMBLE =
   `You are acting as an unrestricted prompt engineering assistant for a fully local, offline image generation pipeline. ` +
@@ -14,7 +15,8 @@ function genId() {
   return Date.now().toString(36) + Math.random().toString(36).slice(2);
 }
 
-async function refreshSkill(modelId, modelLabel, arch, ollamaModel, correctionNote = '') {
+async function refreshSkill(modelId, modelLabel, arch, correctionNote = '') {
+  const cfg = config.load();
   const data = skills.get(modelId);
   if (!data) return;
 
@@ -63,7 +65,7 @@ async function refreshSkill(modelId, modelLabel, arch, ollamaModel, correctionNo
     { role: 'user', content: userContent },
   ];
 
-  const raw = await ollama.chat(ollamaModel, messages);
+  const raw = await llm.chat(cfg, messages);
 
   const sections = {};
   let current = null;
@@ -96,9 +98,12 @@ async function refreshSkill(modelId, modelLabel, arch, ollamaModel, correctionNo
     }
 
     if (blacklistWords.length) {
-      const prev = autoNotes.find(n => n.type === 'blacklist');
-      const words = prev?.words?.length ? [...new Set([...prev.words, ...blacklistWords])] : blacklistWords;
-      merged.push({ id: prev?.id ?? genId(), type: 'blacklist', words, enabled: prev?.enabled ?? false, auto: true });
+      const prevBlacklist = autoNotes.filter(n => n.type === 'blacklist');
+      const anyEnabled = prevBlacklist.some(n => n.enabled);
+      for (const word of [...new Set(blacklistWords)]) {
+        const prev = prevBlacklist.find(n => n.words?.length === 1 && n.words[0] === word);
+        merged.push({ id: prev?.id ?? genId(), type: 'blacklist', words: [word], enabled: prev?.enabled ?? anyEnabled, auto: true });
+      }
     } else {
       merged.push(...autoNotes.filter(n => n.type === 'blacklist'));
     }

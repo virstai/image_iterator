@@ -44,8 +44,8 @@
     />
 
     <RunSection
-      v-if="genState.iterations.length || genState.status"
-      :iterations="genState.iterations"
+      v-if="genState.steps.length || genState.status"
+      :steps="genState.steps"
       :status="genState.status"
       :iter-badge="genState.iterBadge"
       :session-id="genState.sessionId"

@@ -9,7 +9,8 @@ const configPath = () => path.join(dataDir(), 'config.json');
 const GLOBAL_DEFAULTS = {
   ollamaUrl:              'http://127.0.0.1:11434',
   comfyuiUrl:             'http://127.0.0.1:8188',
-  ollamaModel:            '',
+  llmProvider:            'ollama',
+  llmModel:               '',
   activeModel:            null,
   maxIterations:          3,
   humanReview:            false,
@@ -21,13 +22,16 @@ function load() {
   let saved = {};
   try { saved = JSON.parse(fs.readFileSync(configPath(), 'utf8')); } catch { /* no file yet */ }
 
-  return {
+  const merged = {
     ...GLOBAL_DEFAULTS,
     ...saved,
-    ...(process.env.OLLAMA_URL    && { ollamaUrl:   process.env.OLLAMA_URL }),
-    ...(process.env.COMFYUI_URL   && { comfyuiUrl:  process.env.COMFYUI_URL }),
-    ...(process.env.OLLAMA_MODEL  && { ollamaModel: process.env.OLLAMA_MODEL }),
+    ...(process.env.OLLAMA_URL   && { ollamaUrl:  process.env.OLLAMA_URL }),
+    ...(process.env.COMFYUI_URL  && { comfyuiUrl: process.env.COMFYUI_URL }),
+    ...(process.env.OLLAMA_MODEL && { llmModel:   process.env.OLLAMA_MODEL }),
   };
+  // Back-compat: configs written before llmModel was introduced used ollamaModel.
+  if (!merged.llmModel && merged.ollamaModel) merged.llmModel = merged.ollamaModel;
+  return merged;
 }
 
 function save(updates) {

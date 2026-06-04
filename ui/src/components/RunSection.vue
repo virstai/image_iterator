@@ -4,19 +4,29 @@
       <span id="status-text">{{ status }}</span>
       <span v-if="iterBadge" id="iteration-badge">{{ iterBadge }}</span>
     </div>
-    <div class="iter-grid">
-      <IterationCard
-        v-for="it in iterations"
-        :key="it.n"
-        :iteration="it"
-        @open="modalN = it.n"
-      />
+
+    <div
+      v-for="step in steps"
+      :key="step.index"
+      class="step-group"
+    >
+      <div v-if="steps.length > 1" class="step-label">{{ step.label || step.type }}</div>
+      <div class="iter-grid">
+        <IterationCard
+          v-for="it in step.iterations"
+          :key="it.n"
+          :iteration="it"
+          @open="openModal(step.index, it.n)"
+        />
+      </div>
     </div>
+
     <IterationModal
-      v-if="modalN !== null && modalIteration"
+      v-if="modalKey !== null && modalIteration"
       :iteration="modalIteration"
+      :step-index="modalKey.stepIndex"
       :session-id="sessionId"
-      @close="modalN = null"
+      @close="modalKey = null"
     />
   </section>
 </template>
@@ -27,28 +37,47 @@ import IterationCard  from './IterationCard.vue';
 import IterationModal from './IterationModal.vue';
 
 const props = defineProps({
-  iterations: { type: Array,  default: () => [] },
-  status:     { type: String, default: '' },
-  iterBadge:  { type: String, default: '' },
-  sessionId:  { type: String, default: null },
+  steps:     { type: Array,  default: () => [] },
+  status:    { type: String, default: '' },
+  iterBadge: { type: String, default: '' },
+  sessionId: { type: String, default: null },
 });
 
-const modalN = ref(null);
+const modalKey = ref(null); // { stepIndex, iterN }
 
-const modalIteration = computed(() =>
-  modalN.value !== null ? props.iterations.find(it => it.n === modalN.value) ?? null : null
+function openModal(stepIndex, iterN) {
+  modalKey.value = { stepIndex, iterN };
+}
+
+const modalIteration = computed(() => {
+  if (!modalKey.value) return null;
+  const step = props.steps[modalKey.value.stepIndex];
+  return step?.iterations.find(it => it.n === modalKey.value.iterN) ?? null;
+});
+
+watch(() => props.sessionId, () => { modalKey.value = null; });
+
+// Auto-open when an iteration needs human review
+watch(
+  () => {
+    for (const step of props.steps) {
+      const it = step.iterations.find(it => it.humanPending);
+      if (it) return { stepIndex: step.index, iterN: it.n };
+    }
+    return null;
+  },
+  pending => { if (pending) modalKey.value = pending; },
 );
 
-// Reset modal when the session changes so a stale modalN can't match a new iteration
-watch(() => props.sessionId, () => { modalN.value = null; });
-
-// Auto-open when an iteration needs human review or is in acceptance grace period
+// Auto-open when an iteration is in acceptance grace period
 watch(
-  () => props.iterations.find(it => it.humanPending),
-  (pending) => { if (pending) modalN.value = pending.n; }
-);
-watch(
-  () => props.iterations.find(it => it.acceptedPending),
-  (pending) => { if (pending) modalN.value = pending.n; }
+  () => {
+    for (const step of props.steps) {
+      const it = step.iterations.find(it => it.acceptedPending);
+      if (it) return { stepIndex: step.index, iterN: it.n };
+    }
+    return null;
+  },
+  pending => { if (pending) modalKey.value = pending; },
 );
 </script>

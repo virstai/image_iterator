@@ -4,7 +4,7 @@ const express = require('express');
 const router  = express.Router();
 const config    = require('../services/config');
 const comfyui   = require('../services/comfyui');
-const ollama    = require('../services/ollama');
+const llm       = require('../services/llm');
 const skills    = require('../services/skills');
 const { refreshSkill } = require('../services/skillRefresher');
 const { architectures, archMeta, getDefaults } = require('../workflows');
@@ -68,10 +68,10 @@ router.post('/skills/:modelId/refresh', async (req, res) => {
   const cfg = config.load();
   const modelConfig = cfg.models?.[req.params.modelId];
   if (!modelConfig) return res.status(404).json({ error: 'Model not found' });
-  if (!cfg.ollamaModel) return res.status(400).json({ error: 'No Ollama model configured' });
+  if (!cfg.llmModel) return res.status(400).json({ error: 'No LLM model configured' });
 
   try {
-    await refreshSkill(req.params.modelId, modelConfig.label, modelConfig.architecture, cfg.ollamaModel, note.trim());
+    await refreshSkill(req.params.modelId, modelConfig.label, modelConfig.architecture, note.trim());
     res.json(skills.get(req.params.modelId) ?? {});
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -103,18 +103,19 @@ router.get('/architectures', (req, res) => {
 
 // GET /api/sessions/assets — checkpoints, vaes, clips, unets + ollama models
 router.get('/assets', async (req, res) => {
-  const [comfyAssets, ollamaModels] = await Promise.allSettled([
+  const cfg = config.load();
+  const [comfyAssets, llmModels] = await Promise.allSettled([
     comfyui.getAssets(),
-    ollama.listModels(),
+    llm.listModels(cfg),
   ]);
 
-  const comfy  = comfyAssets.status  === 'fulfilled' ? comfyAssets.value  : { checkpoints: [], vaes: [], clips: [], unets: [], errors: [comfyAssets.reason.message] };
-  const oModels = ollamaModels.status === 'fulfilled' ? ollamaModels.value : [];
+  const comfy    = comfyAssets.status === 'fulfilled' ? comfyAssets.value : { checkpoints: [], vaes: [], clips: [], unets: [], errors: [comfyAssets.reason.message] };
+  const models   = llmModels.status   === 'fulfilled' ? llmModels.value   : [];
 
   res.json({
-    ollama:  oModels.map(m => m.name),
+    llm:     models.map(m => m.name),
     comfyui: comfy,
-    errors:  [...(comfy.errors || []), ...(ollamaModels.status === 'rejected' ? [ollamaModels.reason.message] : [])],
+    errors:  [...(comfy.errors || []), ...(llmModels.status === 'rejected' ? [llmModels.reason.message] : [])],
   });
 });
 

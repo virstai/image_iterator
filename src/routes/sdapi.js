@@ -134,7 +134,7 @@ async function fetchBase64(host, imageUrl) {
 
 async function handleGenerationRequest(req, res) {
   const cfg = config.load();
-  if (!cfg.ollamaModel) return res.status(400).json({ error: 'No Ollama model configured.' });
+  if (!cfg.llmModel) return res.status(400).json({ error: 'No LLM model configured.' });
   if (!cfg.activeModel) return res.status(400).json({ error: 'No active model selected.' });
 
   const {

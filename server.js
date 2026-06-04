@@ -42,7 +42,7 @@ if (require.main === module) {
   const PORT = process.env.PORT || 3000;
   server.listen(PORT, () => {
     const cfg = config.load();
-    console.log(`image-iterator running at http://localhost:${PORT}`);
+    console.log(`ComfyRefinery running at http://localhost:${PORT}`);
     console.log(`  Ollama:  ${cfg.ollamaUrl}`);
     console.log(`  ComfyUI: ${cfg.comfyuiUrl}`);
   });

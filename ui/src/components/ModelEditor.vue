@@ -340,13 +340,13 @@ async function deleteNote(id) {
 async function addNote() {
   const text = addText.value.trim();
   if (!text) return;
-  const note = { id: genId(), type: addType.value, enabled: false, auto: false };
   if (addType.value === 'enforce') {
-    note.text = text;
+    localNotes.value.push({ id: genId(), type: 'enforce', enabled: false, auto: false, text });
   } else {
-    note.words = text.split(',').map(w => w.trim()).filter(Boolean);
+    for (const word of text.split(',').map(w => w.trim()).filter(Boolean)) {
+      localNotes.value.push({ id: genId(), type: 'blacklist', words: [word], enabled: false, auto: false });
+    }
   }
-  localNotes.value.push(note);
   addText.value = '';
   await persistNotes();
 }

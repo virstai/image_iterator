@@ -38,7 +38,8 @@ before(async () => {
   fs.writeFileSync(path.join(tmpDir, 'config.json'), JSON.stringify({
     ollamaUrl:             `http://127.0.0.1:${ollamaPort}`,
     comfyuiUrl:            `http://127.0.0.1:${comfyPort}`,
-    ollamaModel:           'test-model',
+    llmModel:              'test-model',
+    llmProvider:           'ollama',
     activeModel:           'test-sd15',
     maxIterations:         3,
     humanReview:           false,
@@ -81,7 +82,7 @@ test('POST /api/generate streams all expected events and accepts on first iterat
   const events = await collectSSE(`${base()}/api/generate`, { prompt: 'a happy cat' });
   const types  = new Set(events.map(e => e.event));
 
-  for (const expected of ['session', 'phase', 'prompt', 'progress', 'image', 'review', 'done']) {
+  for (const expected of ['session', 'step', 'phase', 'prompt', 'progress', 'image', 'review', 'done']) {
     assert.ok(types.has(expected), `missing ${expected} event`);
   }
 
@@ -192,7 +193,7 @@ test('refuse-accepted marks the accepted iteration as REFUSED on a completed ses
   assert.equal(refuseRes.status, 204);
 
   const session = await (await fetch(`${base()}/api/generate/sessions/${sessionId}`)).json();
-  const last = session.iterations.at(-1);
+  const last = session.steps[0].iterations.at(-1);
   assert.equal(last.verdict, 'REFUSED', 'latest iteration should be marked REFUSED');
 });
 
@@ -252,8 +253,8 @@ test('session is persisted to disk and retrievable via GET /sessions/:id', async
   assert.equal(data.id,     sessionId);
   assert.equal(data.prompt, 'a forest path');
   assert.equal(data.status, 'complete');
-  assert.ok(data.iterations.length > 0);
-  assert.ok(data.iterations[0].prompt, 'iteration should have a generated prompt');
+  assert.ok(data.steps[0].iterations.length > 0);
+  assert.ok(data.steps[0].iterations[0].prompt, 'iteration should have a generated prompt');
 });
 
 test('GET /api/generate/sessions lists persisted sessions with summary fields', async () => {
