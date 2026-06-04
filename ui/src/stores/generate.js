@@ -6,6 +6,7 @@ export const genState = reactive({
   iterBadge:  '',
   sessionId:  null,
   loadedDesc: null,
+  loadedRefs: null,
   running:    false,
   steps:      [], // array of step objects, each with its own iterations[]
 });
@@ -68,6 +69,11 @@ export function handleEvent(event, data) {
       const step  = ensureStep(data.index);
       step.type   = data.type;
       step.label  = data.label;
+      // Clear any pending acceptance badges from previous steps
+      for (let i = 0; i < data.index; i++) {
+        const prev = genState.steps[i];
+        if (prev) prev.iterations.forEach(it => { it.acceptedPending = false; });
+      }
       break;
     }
 
@@ -112,9 +118,21 @@ export function handleEvent(event, data) {
       break;
     }
 
+    case 'preview': {
+      const it = ensureIteration(si, data.iteration);
+      if (!it.imageUrl || it.imageUrl.startsWith('data:')) it.imageUrl = data.url;
+      break;
+    }
+
     case 'image': {
       const it = ensureIteration(si, data.iteration);
-      it.imageUrl = data.url;
+      it.imageUrl = data.url; // replaces any preview data-URL with the real image URL
+      break;
+    }
+
+    case 'step_complete': {
+      const step = ensureStep(si);
+      step.outputImageUrl = data.imageUrl;
       break;
     }
 
@@ -153,6 +171,7 @@ export function handleEvent(event, data) {
       it.acceptedPending    = true;
       it.gracePeriod        = data.gracePeriod;
       it.graceMaxIterations = !!data.maxIterations;
+      it.humanReview        = !!data.humanReview;
       genState.status = data.maxIterations
         ? `Max iterations — ${data.gracePeriod}s to continue`
         : `Accepted — ${data.gracePeriod}s to refuse`;
@@ -266,6 +285,7 @@ export async function loadSession(sessionId) {
   const session = await api('GET', `/api/generate/sessions/${sessionId}`);
   genState.sessionId  = session.id;
   genState.loadedDesc = session.prompt;
+  genState.loadedRefs = session.references?.length ? session.references : null;
 
   for (let si = 0; si < (session.steps ?? []).length; si++) {
     const step = session.steps[si];
@@ -301,6 +321,7 @@ export async function refuseAccepted(sessionId, stepIndex, iterationN) {
 export function clearSession() {
   genState.sessionId  = null;
   genState.loadedDesc = null;
+  genState.loadedRefs = null;
   genState.steps      = [];
   genState.status     = '';
   genState.iterBadge  = '';

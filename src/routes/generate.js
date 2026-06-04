@@ -54,6 +54,22 @@ async function runStep(stepDef, stepIndex, session, ctx, cfg, res) {
     const modelConfig = cfg.models?.[stepDef.modelId];
     if (!modelConfig) throw new Error(`Model "${stepDef.modelId}" not found in config`);
     ctx = { ...ctx, modelConfig, skillId: session.workflowId };
+
+    // Chain the previous step's output as init-image input when available
+    if (ctx.inputImage) {
+      try {
+        const url       = new URL(ctx.inputImage, 'http://localhost');
+        const filename  = url.searchParams.get('filename') ?? 'image.png';
+        const subfolder = url.searchParams.get('subfolder') ?? '';
+        const type      = url.searchParams.get('type') ?? 'output';
+        const fetchUrl  = `${cfg.comfyuiUrl}/view?filename=${encodeURIComponent(filename)}&subfolder=${encodeURIComponent(subfolder)}&type=${encodeURIComponent(type)}`;
+        const imgRes    = await fetch(fetchUrl);
+        if (imgRes.ok) {
+          const buffer = Buffer.from(await imgRes.arrayBuffer());
+          ctx = { ...ctx, chainedInputRef: await comfyui.uploadImage(buffer, filename) };
+        }
+      } catch { /* chaining is best-effort */ }
+    }
   }
 
   // Per-step review settings, falling back to global config
@@ -96,10 +112,14 @@ async function runStep(stepDef, stepIndex, session, ctx, cfg, res) {
       console.log(`[${tag}] step ${stepIndex} iter ${iterNum}: queuing ComfyUI job…`);
 
       const workflow = stepType.buildComfyWorkflow(stepDef, prepResult, ctx);
-      const { images } = await comfyui.generate(workflow, pct => {
-        emit(res, 'progress', { step: stepIndex, iteration: iterNum, pct });
-        process.stdout.write(`\r[${tag}] step ${stepIndex} iter ${iterNum}: generating ${pct}%   `);
-      });
+      const { images } = await comfyui.generate(
+        workflow,
+        pct => {
+          emit(res, 'progress', { step: stepIndex, iteration: iterNum, pct });
+          process.stdout.write(`\r[${tag}] step ${stepIndex} iter ${iterNum}: generating ${pct}%   `);
+        },
+        previewUrl => emit(res, 'preview', { step: stepIndex, iteration: iterNum, url: previewUrl }),
+      );
       process.stdout.write('\n');
 
       if (!images.length) throw new Error('ComfyUI returned no images');
@@ -146,7 +166,7 @@ async function runStep(stepDef, stepIndex, session, ctx, cfg, res) {
 
       // ── Phase 5: acceptance grace period ──────────────────────────
       if (accepted && gracePeriod > 0) {
-        emit(res, 'accepted_pending', { step: stepIndex, iteration: iterNum, gracePeriod });
+        emit(res, 'accepted_pending', { step: stepIndex, iteration: iterNum, gracePeriod, humanReview });
         console.log(`[${tag}] step ${stepIndex} iter ${iterNum}: grace period ${gracePeriod}s…`);
         const refused = await waitForAcceptanceGrace(pendingKey, gracePeriod);
         if (refused) {
@@ -166,7 +186,7 @@ async function runStep(stepDef, stepIndex, session, ctx, cfg, res) {
     // Grace period at max iterations — let user refuse and keep iterating
     if (!accepted && gracePeriod > 0 && stepData.iterations.length > 0) {
       const lastIterNum = stepData.iterations.length;
-      emit(res, 'accepted_pending', { step: stepIndex, iteration: lastIterNum, gracePeriod, maxIterations: true });
+      emit(res, 'accepted_pending', { step: stepIndex, iteration: lastIterNum, gracePeriod, humanReview, maxIterations: true });
       console.log(`[${tag}] step ${stepIndex}: max iterations — grace period ${gracePeriod}s`);
       const refused = await waitForAcceptanceGrace(pendingKey, gracePeriod);
       if (refused) {
@@ -204,7 +224,12 @@ async function runPipeline(session, pipelineDef, cfg, res) {
     for (let si = 0; si < pipelineDef.length; si++) {
       const { accepted, outputImageUrl } = await runStep(pipelineDef[si], si, session, { ...ctx }, cfg, res);
       overallAccepted = accepted;
-      if (outputImageUrl) ctx.inputImage = outputImageUrl;
+      if (outputImageUrl) {
+        ctx.inputImage = outputImageUrl;
+        emit(res, 'step_complete', { step: si, imageUrl: outputImageUrl, accepted });
+      }
+      // Don't run subsequent steps on a rejected output
+      if (!accepted && si < pipelineDef.length - 1) break;
     }
 
     session.status = 'complete';
@@ -263,10 +288,10 @@ function buildPipelineFromWorkflow(workflow, genParams, review) {
 
 function buildSessionSteps(pipelineDef, cfg) {
   return pipelineDef.map(stepDef => ({
-    type:          stepDef.type,
-    label:         stepDef.type === 'generate' ? (cfg.models?.[stepDef.modelId]?.label ?? stepDef.modelId) : stepDef.type,
-    modelId:       stepDef.modelId ?? null,
-    iterations:    [],
+    type:           stepDef.type,
+    label:          steps.get(stepDef.type).label(stepDef, cfg),
+    modelId:        stepDef.modelId ?? null,
+    iterations:     [],
     outputImageUrl: null,
   }));
 }

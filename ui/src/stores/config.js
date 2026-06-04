@@ -3,7 +3,7 @@ import { api } from '../api.js';
 
 export const configState = reactive({
   config:   {},
-  assets:   { llm: [], comfyui: { checkpoints: [], vaes: [], clips: [], unets: [] } },
+  assets:   { llm: [], comfyui: { checkpoints: [], vaes: [], clips: [], unets: [], upscaleModels: [] } },
   archMeta: {},
 });
 

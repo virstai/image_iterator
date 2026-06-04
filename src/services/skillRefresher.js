@@ -28,19 +28,27 @@ async function refreshSkill(workflowId, workflowLabel, arch, correctionNote = ''
     ? `${o.accepts}/${o.accepts + o.rejects} accepted`
     : 'No session data yet.';
 
-  const currentAutoNotes = (data.notes ?? []).filter(n => n.auto);
-  const currentEnforce   = currentAutoNotes.filter(n => n.type === 'enforce').map(n => n.text);
-  const currentBlacklist = currentAutoNotes.filter(n => n.type === 'blacklist').flatMap(n => n.words ?? []);
+  const autoNotes        = (data.notes ?? []).filter(n => n.auto);
+  const lockedEnforce    = autoNotes.filter(n => n.enabled  && n.type === 'enforce').map(n => n.text);
+  const lockedBlacklist  = autoNotes.filter(n => n.enabled  && n.type === 'blacklist').flatMap(n => n.words ?? []);
+  const pendingEnforce   = autoNotes.filter(n => !n.enabled && n.type === 'enforce').map(n => n.text);
+  const pendingBlacklist = autoNotes.filter(n => !n.enabled && n.type === 'blacklist').flatMap(n => n.words ?? []);
 
   const userContent =
     `Workflow: ${workflowLabel} (architecture: ${arch})\n\n` +
     `Outcome data:\n${statsText}\n\n` +
     `Current skill text:\n${data.skill ?? 'None yet — write a fresh one.'}\n\n` +
-    (currentEnforce.length
-      ? `Currently active enforce rules (keep if still valid, update or omit if outdated):\n${currentEnforce.map(t => `- ${t}`).join('\n')}\n\n`
+    (lockedEnforce.length
+      ? `User-approved enforce rules (locked — do NOT re-suggest these):\n${lockedEnforce.map(t => `- ${t}`).join('\n')}\n\n`
       : '') +
-    (currentBlacklist.length
-      ? `Currently blacklisted words (keep these unless definitely no longer problematic): ${currentBlacklist.join(', ')}\n\n`
+    (lockedBlacklist.length
+      ? `User-approved blacklist words (locked — do NOT re-suggest these): ${lockedBlacklist.join(', ')}\n\n`
+      : '') +
+    (pendingEnforce.length
+      ? `Pending enforce rules (update or drop if no longer relevant):\n${pendingEnforce.map(t => `- ${t}`).join('\n')}\n\n`
+      : '') +
+    (pendingBlacklist.length
+      ? `Pending blacklist words (update or drop if no longer relevant): ${pendingBlacklist.join(', ')}\n\n`
       : '') +
     (correctionNote
       ? `User correction (takes priority over inferred patterns — apply it directly):\n${correctionNote}\n\n`
@@ -82,33 +90,31 @@ async function refreshSkill(workflowId, workflowLabel, arch, correctionNote = ''
   const blacklistWords = (sections.BLACKLIST ?? []).join(',').split(',').map(w => w.trim()).filter(Boolean);
 
   if (enforceLines.length || blacklistWords.length) {
-    const latest    = skills.get(workflowId);
-    const userNotes = (latest.notes ?? []).filter(n => !n.auto);
-    const autoNotes = (latest.notes ?? []).filter(n => n.auto);
-    const merged    = [];
+    const latest     = skills.get(workflowId);
+    const userNotes  = (latest.notes ?? []).filter(n => !n.auto);
+    const autoNotes  = (latest.notes ?? []).filter(n => n.auto);
+    // Enabled (user-approved) notes are locked — AI must never remove or overwrite them.
+    const lockedAuto = autoNotes.filter(n => n.enabled);
 
-    const anyEnforceEnabled = autoNotes.some(n => n.type === 'enforce' && n.enabled);
-    if (enforceLines.length) {
-      for (const text of enforceLines) {
-        const prev = autoNotes.find(n => n.type === 'enforce' && n.text === text);
-        merged.push({ id: prev?.id ?? genId(), type: 'enforce', text, enabled: prev?.enabled ?? anyEnforceEnabled, auto: true });
-      }
-    } else {
-      merged.push(...autoNotes.filter(n => n.type === 'enforce'));
-    }
+    const lockedEnforceTexts = new Set(lockedAuto.filter(n => n.type === 'enforce').map(n => n.text));
+    const lockedBlacklistWords = new Set(lockedAuto.filter(n => n.type === 'blacklist').flatMap(n => n.words ?? []));
 
-    if (blacklistWords.length) {
-      const prevBlacklist = autoNotes.filter(n => n.type === 'blacklist');
-      const anyEnabled = prevBlacklist.some(n => n.enabled);
-      for (const word of [...new Set(blacklistWords)]) {
-        const prev = prevBlacklist.find(n => n.words?.length === 1 && n.words[0] === word);
-        merged.push({ id: prev?.id ?? genId(), type: 'blacklist', words: [word], enabled: prev?.enabled ?? anyEnabled, auto: true });
-      }
-    } else {
-      merged.push(...autoNotes.filter(n => n.type === 'blacklist'));
-    }
+    // New AI suggestions start disabled; skip any that duplicate a locked note.
+    const newEnforce = enforceLines
+      .filter(text => !lockedEnforceTexts.has(text))
+      .map(text => {
+        const prev = autoNotes.find(n => !n.enabled && n.type === 'enforce' && n.text === text);
+        return { id: prev?.id ?? genId(), type: 'enforce', text, enabled: false, auto: true };
+      });
 
-    skills.saveNotes(workflowId, [...userNotes, ...merged]);
+    const newBlacklist = [...new Set(blacklistWords)]
+      .filter(word => !lockedBlacklistWords.has(word))
+      .map(word => {
+        const prev = autoNotes.find(n => !n.enabled && n.type === 'blacklist' && n.words?.length === 1 && n.words[0] === word);
+        return { id: prev?.id ?? genId(), type: 'blacklist', words: [word], enabled: false, auto: true };
+      });
+
+    skills.saveNotes(workflowId, [...userNotes, ...lockedAuto, ...newEnforce, ...newBlacklist]);
   }
 
   console.log(`[skills] updated skill for ${workflowId}${correctionNote ? ' (manual correction)' : ''}`);

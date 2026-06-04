@@ -10,7 +10,10 @@
       :key="step.index"
       class="step-group"
     >
-      <div v-if="steps.length > 1" class="step-label">{{ step.label || step.type }}</div>
+      <div :class="['step-label', `type-${step.type}`]">
+        <span class="step-type-badge">{{ step.type }}</span>
+        {{ step.label || step.type }}
+      </div>
       <div class="iter-grid">
         <IterationCard
           v-for="it in step.iterations"
@@ -69,11 +72,12 @@ watch(
   pending => { if (pending) modalKey.value = pending; },
 );
 
-// Auto-open when an iteration is in acceptance grace period
+// Auto-open when an iteration is in acceptance grace period AND human review is enabled
+// (without humanReview the status bar message is sufficient; no modal interruption)
 watch(
   () => {
     for (const step of props.steps) {
-      const it = step.iterations.find(it => it.acceptedPending);
+      const it = step.iterations.find(it => it.acceptedPending && it.humanReview);
       if (it) return { stepIndex: step.index, iterN: it.n };
     }
     return null;

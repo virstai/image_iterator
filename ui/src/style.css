@@ -111,6 +111,29 @@ label textarea { resize: vertical; }
 
 .panel-actions { display: flex; gap: 8px; margin-top: 6px; flex-wrap: wrap; }
 
+/* ── Workflow editor steps ────────────────────────────────────────────────── */
+.step-block { border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 16px; margin-top: 12px; }
+.step-header {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 14px; padding-bottom: 10px; border-bottom: 1px solid var(--border);
+}
+
+/* ── Step groups (RunSection) ─────────────────────────────────────────────── */
+.step-group { margin-bottom: 20px; }
+.step-group + .step-group { padding-top: 16px; border-top: 1px solid var(--border); }
+.step-label {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 12px; font-weight: 600; color: var(--muted);
+  text-transform: uppercase; letter-spacing: 0.06em;
+  margin-bottom: 10px;
+}
+.step-type-badge {
+  font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 10px;
+  background: var(--surface2); color: var(--muted); text-transform: uppercase;
+}
+.step-label.type-generate .step-type-badge { background: color-mix(in srgb, var(--accent) 18%, transparent); color: var(--accent); }
+.step-label.type-upscale  .step-type-badge { background: color-mix(in srgb, var(--accept) 18%, transparent); color: var(--accept); }
+
 /* ── Model list ───────────────────────────────────────────────────────────── */
 #model-list, #workflow-list { list-style: none; margin-bottom: 12px; display: flex; flex-direction: column; gap: 6px; }
 #model-list li {

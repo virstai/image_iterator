@@ -2,6 +2,7 @@
 
 const registry = {
   generate: require('./generate'),
+  upscale:  require('./upscale'),
 };
 
 function get(type) {

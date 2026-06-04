@@ -10,59 +10,168 @@
     <!-- Steps -->
     <div v-for="(step, si) in form.steps" :key="si" class="step-block">
       <div class="step-header">
-        <strong>Step {{ si + 1 }}: Generate</strong>
+        <strong>Step {{ si + 1 }}: {{ step.type === 'upscale' ? 'Upscale' : 'Generate' }}</strong>
         <button v-if="form.steps.length > 1" class="small danger" @click="removeStep(si)">Remove</button>
       </div>
 
-      <label>Model
-        <select v-model="step.modelId">
-          <option value="">— select model —</option>
-          <option v-for="(m, id) in config.models" :key="id" :value="id">
-            {{ m.label || id }} ({{ m.architecture || '?' }})
-          </option>
-        </select>
-      </label>
-
-      <!-- Params -->
-      <div class="row">
-        <label>Width  <input type="number" v-model.number="step.width"  step="64" :placeholder="archDefault(si, 'width')"></label>
-        <label>Height <input type="number" v-model.number="step.height" step="64" :placeholder="archDefault(si, 'height')"></label>
-        <label>Steps  <input type="number" v-model.number="step.steps"  min="1"   :placeholder="archDefault(si, 'steps')"></label>
-      </div>
-      <div class="row">
-        <label v-if="showCfg(si)">CFG scale
-          <input type="number" v-model.number="step.cfgScale" step="0.5" :placeholder="archDefault(si, 'cfgScale')">
-        </label>
-        <label v-if="showGuidance(si)">Guidance
-          <input type="number" v-model.number="step.guidance" step="0.5" :placeholder="archDefault(si, 'guidance')">
-        </label>
-        <label>Sampler
-          <select v-model="step.sampler">
-            <option value="">arch default</option>
-            <option>euler</option><option>euler_ancestral</option>
-            <option>er_sde</option><option>dpmpp_2m</option>
-            <option>dpmpp_2m_sde</option><option>dpmpp_3m_sde</option>
-            <option>ddim</option><option>uni_pc</option>
+      <!-- ── Generate step ──────────────────────────────────────────────── -->
+      <template v-if="step.type !== 'upscale'">
+        <label>Model
+          <select v-model="step.modelId">
+            <option value="">— select model —</option>
+            <option v-for="(m, id) in config.models" :key="id" :value="id">
+              {{ m.label || id }} ({{ m.architecture || '?' }})
+            </option>
           </select>
         </label>
-        <label>Scheduler
-          <select v-model="step.scheduler">
-            <option value="">arch default</option>
-            <option>normal</option><option>karras</option><option>exponential</option>
-            <option>sgm_uniform</option><option>simple</option><option>beta</option>
+
+        <div class="row">
+          <label>Width  <input type="number" v-model.number="step.width"  step="64" :placeholder="archDefault(si, 'width')"></label>
+          <label>Height <input type="number" v-model.number="step.height" step="64" :placeholder="archDefault(si, 'height')"></label>
+          <label>Steps  <input type="number" v-model.number="step.steps"  min="1"   :placeholder="archDefault(si, 'steps')"></label>
+        </div>
+        <div class="row">
+          <label v-if="showCfg(si)">CFG scale
+            <input type="number" v-model.number="step.cfgScale" step="0.5" :placeholder="archDefault(si, 'cfgScale')">
+          </label>
+          <label v-if="showGuidance(si)">Guidance
+            <input type="number" v-model.number="step.guidance" step="0.5" :placeholder="archDefault(si, 'guidance')">
+          </label>
+          <label>Sampler
+            <select v-model="step.sampler">
+              <option value="">arch default</option>
+              <option>euler</option><option>euler_ancestral</option>
+              <option>er_sde</option><option>dpmpp_2m</option>
+              <option>dpmpp_2m_sde</option><option>dpmpp_3m_sde</option>
+              <option>ddim</option><option>uni_pc</option>
+            </select>
+          </label>
+          <label>Scheduler
+            <select v-model="step.scheduler">
+              <option value="">arch default</option>
+              <option>normal</option><option>karras</option><option>exponential</option>
+              <option>sgm_uniform</option><option>simple</option><option>beta</option>
+            </select>
+          </label>
+        </div>
+
+        <label v-if="showNegative(si)">Negative prompt <span class="hint">(leave blank for arch default)</span>
+          <textarea v-model="step.negativePrompt" rows="2"></textarea>
+        </label>
+
+        <label v-if="stepArch(si) === 'sdxl'">Refiner switch at <span class="hint">(0–1, if model has refiner)</span>
+          <input type="number" v-model.number="step.refinerSwitchAt" min="0" max="1" step="0.05" placeholder="0.8">
+        </label>
+
+        <!-- Reference strategy -->
+        <div class="review-block">
+          <strong>References</strong>
+          <label class="checkbox-label">
+            <input type="checkbox" v-model="step.visionNotes"> Pass all references to LLM for composition guidance
+          </label>
+          <div class="row" style="margin-top:6px">
+            <label>When one reference
+              <select v-model="step.refOneMode">
+                <option value="txt2img">Ignore (txt2img)</option>
+                <option value="init-image">Use as init image (img2img)</option>
+              </select>
+            </label>
+            <label v-if="step.refOneMode === 'init-image'">Denoise strength
+              <input type="number" v-model.number="step.refOneDenoise" min="0.01" max="1" step="0.05" placeholder="0.6">
+            </label>
+          </div>
+          <div class="row">
+            <label>When many references
+              <select v-model="step.refManyMode">
+                <option value="txt2img">Ignore (txt2img)</option>
+                <option value="init-image">Use first as init image (img2img)</option>
+                <option value="adapter" disabled>Adapter — Phase 5</option>
+              </select>
+            </label>
+            <label v-if="step.refManyMode === 'init-image'">Denoise strength
+              <input type="number" v-model.number="step.refManyDenoise" min="0.01" max="1" step="0.05" placeholder="0.6">
+            </label>
+          </div>
+        </div>
+      </template>
+
+      <!-- ── Upscale step ───────────────────────────────────────────────── -->
+      <template v-else>
+        <label>Upscale type
+          <select v-model="step.upscaleType">
+            <option value="model">Model upscaler (ESRGAN / RealESRGAN)</option>
+            <option value="hires">Hires fix (re-diffusion)</option>
           </select>
         </label>
-      </div>
 
-      <label v-if="showNegative(si)">Negative prompt <span class="hint">(leave blank for arch default)</span>
-        <textarea v-model="step.negativePrompt" rows="2"></textarea>
-      </label>
+        <!-- Model upscaler -->
+        <template v-if="step.upscaleType === 'model'">
+          <div class="row">
+            <label>Upscale model
+              <select v-model="step.upscaleModel">
+                <option value="">— select model —</option>
+                <option v-for="m in upscaleModels" :key="m" :value="m">{{ m }}</option>
+              </select>
+              <span v-if="!upscaleModels.length" class="hint">No upscale models found in ComfyUI.</span>
+            </label>
+            <label>Output factor
+              <select v-model.number="step.factor">
+                <option :value="2">×2</option>
+                <option :value="4">×4</option>
+                <option :value="8">×8</option>
+              </select>
+            </label>
+          </div>
+        </template>
 
-      <label v-if="stepArch(si) === 'sdxl'">Refiner switch at <span class="hint">(0–1, if model has refiner)</span>
-        <input type="number" v-model.number="step.refinerSwitchAt" min="0" max="1" step="0.05" placeholder="0.8">
-      </label>
+        <!-- Hires fix -->
+        <template v-else>
+          <label>Model <span class="hint">(checkpoint used for re-diffusion)</span>
+            <select v-model="step.modelId">
+              <option value="">— select model —</option>
+              <option v-for="(m, id) in config.models" :key="id" :value="id">
+                {{ m.label || id }} ({{ m.architecture || '?' }})
+              </option>
+            </select>
+          </label>
+          <div class="row">
+            <label>Scale
+              <select v-model.number="step.scale">
+                <option :value="2">×2</option>
+                <option :value="4">×4</option>
+              </select>
+            </label>
+            <label>Denoise
+              <input type="number" v-model.number="step.denoise" min="0.01" max="1" step="0.05" placeholder="0.35">
+            </label>
+            <label>Steps
+              <input type="number" v-model.number="step.steps" min="1" :placeholder="archDefault(si, 'steps')">
+            </label>
+          </div>
+          <div class="row">
+            <label v-if="showCfg(si)">CFG scale
+              <input type="number" v-model.number="step.cfgScale" step="0.5" :placeholder="archDefault(si, 'cfgScale')">
+            </label>
+            <label>Sampler
+              <select v-model="step.sampler">
+                <option value="">arch default</option>
+                <option>euler</option><option>euler_ancestral</option>
+                <option>dpmpp_2m</option><option>dpmpp_2m_sde</option>
+                <option>dpmpp_3m_sde</option><option>ddim</option><option>uni_pc</option>
+              </select>
+            </label>
+            <label>Scheduler
+              <select v-model="step.scheduler">
+                <option value="">arch default</option>
+                <option>normal</option><option>karras</option><option>exponential</option>
+                <option>sgm_uniform</option><option>simple</option><option>beta</option>
+              </select>
+            </label>
+          </div>
+        </template>
+      </template>
 
-      <!-- Review settings -->
+      <!-- ── Review (all step types) ───────────────────────────────────── -->
       <div class="review-block">
         <strong>Review</strong>
         <div class="row">
@@ -77,40 +186,12 @@
           <input type="checkbox" v-model="step.humanReview"> Require human review
         </label>
       </div>
-
-      <!-- Reference strategy -->
-      <div class="review-block">
-        <strong>References</strong>
-        <label class="checkbox-label">
-          <input type="checkbox" v-model="step.visionNotes"> Pass all references to LLM for composition guidance
-        </label>
-        <div class="row" style="margin-top:6px">
-          <label>When one reference
-            <select v-model="step.refOneMode">
-              <option value="txt2img">Ignore (txt2img)</option>
-              <option value="init-image">Use as init image (img2img)</option>
-            </select>
-          </label>
-          <label v-if="step.refOneMode === 'init-image'">Denoise strength
-            <input type="number" v-model.number="step.refOneDenoise" min="0.01" max="1" step="0.05" placeholder="0.6">
-          </label>
-        </div>
-        <div class="row">
-          <label>When many references
-            <select v-model="step.refManyMode">
-              <option value="txt2img">Ignore (txt2img)</option>
-              <option value="init-image">Use first as init image (img2img)</option>
-              <option value="adapter" disabled>Adapter — Phase 5</option>
-            </select>
-          </label>
-          <label v-if="step.refManyMode === 'init-image'">Denoise strength
-            <input type="number" v-model.number="step.refManyDenoise" min="0.01" max="1" step="0.05" placeholder="0.6">
-          </label>
-        </div>
-      </div>
     </div>
 
-    <button class="secondary" style="margin-top:8px" @click="addStep">+ Add generate step</button>
+    <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
+      <button class="secondary" @click="addGenerateStep">+ Add generate step</button>
+      <button class="secondary" @click="addUpscaleStep">+ Add upscale step</button>
+    </div>
 
     <!-- Skill section -->
     <div v-if="workflowId && skillData" class="skill-section">
@@ -180,7 +261,7 @@
 </template>
 
 <script setup>
-import { reactive, computed, watch, onMounted, ref } from 'vue';
+import { reactive, computed, watch, ref } from 'vue';
 import { saveWorkflow, deleteWorkflow, loadSkill, saveNotes, refreshSkill as apiRefreshSkill } from '../stores/config.js';
 
 const props = defineProps({
@@ -199,8 +280,14 @@ const addText        = ref('');
 const correctionNote = ref('');
 const refreshing     = ref(false);
 
-function blankStep() {
+const upscaleModels = computed(() => {
+  const list = props.assets?.comfyui?.upscaleModels;
+  return Array.isArray(list) ? list : [];
+});
+
+function blankGenerateStep() {
   return {
+    type: 'generate',
     modelId: '', width: '', height: '', steps: '', cfgScale: '', guidance: '',
     sampler: '', scheduler: '', negativePrompt: '', refinerSwitchAt: '',
     maxIterations: '', humanReview: false, gracePeriod: '',
@@ -209,32 +296,64 @@ function blankStep() {
   };
 }
 
-const form = reactive({ label: '', steps: [blankStep()] });
+function blankUpscaleStep() {
+  return {
+    type: 'upscale', upscaleType: 'model',
+    upscaleModel: '', factor: 4,
+    modelId: '', scale: 2, denoise: 0.35, steps: '', cfgScale: '', sampler: '', scheduler: '',
+    maxIterations: '', humanReview: false, gracePeriod: '',
+  };
+}
 
-watch(() => props.workflow, wf => {
-  if (!wf) { form.label = ''; form.steps = [blankStep()]; return; }
-  form.label = wf.label ?? '';
-  form.steps = (wf.steps ?? []).map(s => ({
-    modelId:        s.modelId         ?? '',
-    width:          s.params?.width   ?? '',
-    height:         s.params?.height  ?? '',
-    steps:          s.params?.steps   ?? '',
-    cfgScale:       s.params?.cfgScale      ?? '',
-    guidance:       s.params?.guidance      ?? '',
-    sampler:        s.params?.sampler       ?? '',
-    scheduler:      s.params?.scheduler     ?? '',
+function stepFromDef(s) {
+  if (s.type === 'upscale') {
+    return {
+      type:         'upscale',
+      upscaleType:  s.upscaleType  ?? 'model',
+      upscaleModel: s.upscaleModel ?? '',
+      factor:       s.factor       ?? 4,
+      modelId:      s.modelId      ?? '',
+      scale:        s.scale        ?? 2,
+      denoise:      s.denoise      ?? 0.35,
+      steps:        s.steps        ?? '',
+      cfgScale:     s.cfgScale     ?? '',
+      sampler:      s.sampler      ?? '',
+      scheduler:    s.scheduler    ?? '',
+      maxIterations: s.review?.maxIterations ?? '',
+      humanReview:   s.review?.humanReview   ?? false,
+      gracePeriod:   s.review?.gracePeriod   ?? '',
+    };
+  }
+  return {
+    type:           'generate',
+    modelId:        s.modelId              ?? '',
+    width:          s.params?.width        ?? '',
+    height:         s.params?.height       ?? '',
+    steps:          s.params?.steps        ?? '',
+    cfgScale:       s.params?.cfgScale     ?? '',
+    guidance:       s.params?.guidance     ?? '',
+    sampler:        s.params?.sampler      ?? '',
+    scheduler:      s.params?.scheduler    ?? '',
     negativePrompt: s.params?.negativePrompt ?? '',
     refinerSwitchAt: s.params?.refinerSwitchAt ?? '',
-    maxIterations:  s.review?.maxIterations  ?? '',
-    humanReview:    s.review?.humanReview    ?? false,
-    gracePeriod:    s.review?.gracePeriod    ?? '',
+    maxIterations:  s.review?.maxIterations ?? '',
+    humanReview:    s.review?.humanReview   ?? false,
+    gracePeriod:    s.review?.gracePeriod   ?? '',
     visionNotes:    s.referenceStrategy?.visionNotes ?? false,
-    refOneMode:     s.referenceStrategy?.diffusion?.one?.mode  ?? 'txt2img',
+    refOneMode:     s.referenceStrategy?.diffusion?.one?.mode    ?? 'txt2img',
     refOneDenoise:  s.referenceStrategy?.diffusion?.one?.denoise ?? 0.6,
-    refManyMode:    s.referenceStrategy?.diffusion?.many?.mode ?? 'txt2img',
+    refManyMode:    s.referenceStrategy?.diffusion?.many?.mode   ?? 'txt2img',
     refManyDenoise: s.referenceStrategy?.diffusion?.many?.denoise ?? 0.6,
-  }));
-  if (!form.steps.length) form.steps = [blankStep()];
+  };
+}
+
+const form = reactive({ label: '', steps: [blankGenerateStep()] });
+
+watch(() => props.workflow, wf => {
+  if (!wf) { form.label = ''; form.steps = [blankGenerateStep()]; return; }
+  form.label = wf.label ?? '';
+  form.steps = (wf.steps ?? []).map(stepFromDef);
+  if (!form.steps.length) form.steps = [blankGenerateStep()];
 }, { immediate: true });
 
 watch(() => props.workflowId, async id => {
@@ -261,8 +380,9 @@ function showCfg(si)      { return ['sd15','sdxl','sd3','anima'].includes(stepAr
 function showGuidance(si) { return ['flux','flux2','chroma'].includes(stepArch(si)); }
 function showNegative(si) { return ['sd15','sdxl','sd3','anima','chroma'].includes(stepArch(si)); }
 
-function addStep() { form.steps.push(blankStep()); }
-function removeStep(si) { form.steps.splice(si, 1); }
+function addGenerateStep() { form.steps.push(blankGenerateStep()); }
+function addUpscaleStep()  { form.steps.push(blankUpscaleStep()); }
+function removeStep(si)    { form.steps.splice(si, 1); }
 
 const outcomeRate = computed(() => {
   const o = skillData.value?.outcomes;
@@ -327,40 +447,75 @@ async function addNote() {
 async function save() {
   if (!form.label.trim()) return alert('Enter a name for this workflow.');
   if (!form.steps.length) return alert('Add at least one step.');
-  if (form.steps.some(s => !s.modelId)) return alert('Select a model for every step.');
 
-  const steps = form.steps.map(s => ({
-    type:    'generate',
-    modelId: s.modelId,
-    params: {
-      ...(s.width          !== '' && { width:          Number(s.width) }),
-      ...(s.height         !== '' && { height:         Number(s.height) }),
-      ...(s.steps          !== '' && { steps:          Number(s.steps) }),
-      ...(s.cfgScale       !== '' && { cfgScale:       Number(s.cfgScale) }),
-      ...(s.guidance       !== '' && { guidance:       Number(s.guidance) }),
-      ...(s.sampler              && { sampler:         s.sampler }),
-      ...(s.scheduler            && { scheduler:       s.scheduler }),
-      ...(s.negativePrompt       && { negativePrompt:  s.negativePrompt }),
-      ...(s.refinerSwitchAt !== '' && { refinerSwitchAt: Number(s.refinerSwitchAt) }),
-    },
-    review: {
+  if (form.steps.some(s => s.type !== 'upscale' && !s.modelId)) {
+    return alert('Select a model for every generate step.');
+  }
+  if (form.steps.some(s => s.type === 'upscale' && s.upscaleType === 'model' && !s.upscaleModel)) {
+    return alert('Select an upscale model for every model upscale step.');
+  }
+  if (form.steps.some(s => s.type === 'upscale' && s.upscaleType === 'hires' && !s.modelId)) {
+    return alert('Select a model for every hires upscale step.');
+  }
+
+  const steps = form.steps.map(s => {
+    const review = {
       ...(s.maxIterations !== '' && { maxIterations: Number(s.maxIterations) }),
       ...(s.gracePeriod   !== '' && { gracePeriod:   Number(s.gracePeriod) }),
       humanReview: s.humanReview,
-    },
-    referenceStrategy: {
-      visionNotes: s.visionNotes,
-      diffusion: {
-        none: 'txt2img',
-        one:  s.refOneMode === 'init-image'
-          ? { mode: 'init-image', denoise: Number(s.refOneDenoise) || 0.6 }
-          : { mode: 'txt2img' },
-        many: s.refManyMode === 'init-image'
-          ? { mode: 'init-image', denoise: Number(s.refManyDenoise) || 0.6 }
-          : { mode: s.refManyMode },
+    };
+
+    if (s.type === 'upscale') {
+      if (s.upscaleType === 'hires') {
+        return {
+          type: 'upscale', upscaleType: 'hires',
+          modelId:  s.modelId,
+          scale:    s.scale ?? 2,
+          denoise:  s.denoise !== '' ? Number(s.denoise) : undefined,
+          ...(s.steps    !== '' && { steps:    Number(s.steps) }),
+          ...(s.cfgScale !== '' && { cfgScale: Number(s.cfgScale) }),
+          ...(s.sampler            && { sampler:    s.sampler }),
+          ...(s.scheduler          && { scheduler:  s.scheduler }),
+          review,
+        };
+      }
+      return {
+        type: 'upscale', upscaleType: 'model',
+        upscaleModel: s.upscaleModel,
+        factor:       s.factor ?? 4,
+        review,
+      };
+    }
+
+    return {
+      type:    'generate',
+      modelId: s.modelId,
+      params: {
+        ...(s.width          !== '' && { width:          Number(s.width) }),
+        ...(s.height         !== '' && { height:         Number(s.height) }),
+        ...(s.steps          !== '' && { steps:          Number(s.steps) }),
+        ...(s.cfgScale       !== '' && { cfgScale:       Number(s.cfgScale) }),
+        ...(s.guidance       !== '' && { guidance:       Number(s.guidance) }),
+        ...(s.sampler              && { sampler:         s.sampler }),
+        ...(s.scheduler            && { scheduler:       s.scheduler }),
+        ...(s.negativePrompt       && { negativePrompt:  s.negativePrompt }),
+        ...(s.refinerSwitchAt !== '' && { refinerSwitchAt: Number(s.refinerSwitchAt) }),
       },
-    },
-  }));
+      review,
+      referenceStrategy: {
+        visionNotes: s.visionNotes,
+        diffusion: {
+          none: 'txt2img',
+          one:  s.refOneMode === 'init-image'
+            ? { mode: 'init-image', denoise: Number(s.refOneDenoise) || 0.6 }
+            : { mode: 'txt2img' },
+          many: s.refManyMode === 'init-image'
+            ? { mode: 'init-image', denoise: Number(s.refManyDenoise) || 0.6 }
+            : { mode: s.refManyMode },
+        },
+      },
+    };
+  });
 
   await saveWorkflow(props.workflowId, { label: form.label.trim(), steps });
   emit('saved');

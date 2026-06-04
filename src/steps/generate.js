@@ -138,6 +138,12 @@ function buildComfyWorkflow(stepDef, prepareResult, ctx) {
   }
   // refs.length > 1 && rs?.many?.mode === 'adapter' → Phase 5, falls through to txt2img
 
+  // Chain previous step's output as init-image when no reference override is active
+  if (!initImage && ctx.chainedInputRef) {
+    initImage = ctx.chainedInputRef;
+    denoise   = stepDef.params?.chainDenoise ?? 0.5;
+  }
+
   const { workflow } = buildArchWorkflow(ctx.modelConfig, {
     ...prepareResult.params,
     ...(initImage ? { initImage, denoise } : {}),

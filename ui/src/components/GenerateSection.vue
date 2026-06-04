@@ -50,6 +50,7 @@ const props = defineProps({
   running:    { type: Boolean, default: false },
   sessionId:  { type: String,  default: null },
   loadedDesc: { type: String,  default: null },
+  loadedRefs: { type: Array,   default: null },
   config:     { type: Object,  default: () => ({}) },
 });
 const emit = defineEmits(['generate', 'continue', 'clear', 'open-workflows', 'open-settings']);
@@ -61,6 +62,7 @@ const uploading   = ref(false);
 const fileInput   = ref(null);
 
 watch(() => props.loadedDesc, val => { if (val) description.value = val; });
+watch(() => props.loadedRefs, refs => { if (refs) references.value = [...refs]; });
 
 async function uploadFiles(files) {
   if (!files.length) return;
