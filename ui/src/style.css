@@ -308,6 +308,86 @@ button:disabled  { opacity: .45; cursor: not-allowed; }
 .hr-feedback:focus { outline: none; border-color: var(--accent); }
 .hr-actions { display: flex; gap: 8px; }
 
+/* ── Reference image grid ─────────────────────────────────────────────────── */
+.ref-grid-wrap {
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+  transition: border-color .15s, background .15s;
+  min-height: 48px;
+}
+.ref-grid-wrap:has(.ref-grid-empty):hover,
+.ref-grid-wrap.ref-grid-drag {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 5%, transparent);
+}
+
+.ref-grid-empty {
+  display: flex; align-items: center; justify-content: center;
+  min-height: 48px; cursor: pointer; padding: 8px 12px;
+}
+.ref-grid-hint { font-size: 12px; color: var(--muted); user-select: none; }
+
+.ref-grid {
+  display: flex; flex-wrap: wrap; gap: 7px; padding: 8px;
+  align-items: flex-start;
+}
+
+/* Individual reference tile */
+.ref-img {
+  position: relative; width: 82px; height: 82px;
+  border-radius: 5px; overflow: hidden; flex-shrink: 0;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  transition: border-color .15s;
+}
+.ref-img:hover { border-color: var(--accent); }
+.ref-img img {
+  width: 100%; height: 100%; object-fit: cover; display: block;
+  user-select: none; pointer-events: none;
+}
+.ref-img-remove {
+  position: absolute; top: 4px; right: 4px;
+  width: 20px; height: 20px;
+  background: rgba(0,0,0,.72); border: none; color: #fff;
+  border-radius: 50%; font-size: 13px; line-height: 1;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; opacity: 0; transition: opacity .12s;
+  padding: 0;
+}
+.ref-img:hover .ref-img-remove { opacity: 1; }
+.ref-img-remove:hover { background: var(--danger); }
+.ref-img-num {
+  position: absolute; bottom: 4px; left: 5px;
+  font-size: 10px; font-weight: 600;
+  color: rgba(255,255,255,.75);
+  text-shadow: 0 1px 3px rgba(0,0,0,.9);
+  user-select: none;
+}
+
+/* Add-more tile */
+.ref-add-tile {
+  width: 82px; height: 82px; flex-shrink: 0;
+  border: 1px dashed var(--border); border-radius: 5px;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; color: var(--muted); font-size: 22px;
+  transition: border-color .15s, color .15s;
+  user-select: none;
+}
+.ref-add-tile:not(.is-uploading):hover {
+  border-color: var(--accent); color: var(--accent);
+}
+.ref-add-tile.is-uploading {
+  cursor: default;
+}
+.ref-spinner {
+  font-size: 13px; color: var(--muted);
+  animation: ref-pulse 1s ease-in-out infinite alternate;
+}
+@keyframes ref-pulse {
+  from { opacity: .4; }
+  to   { opacity: 1; }
+}
+
 /* ── Utilities ────────────────────────────────────────────────────────────── */
 .hidden { display: none !important; }
 .indent { padding-left: 20px; border-left: 2px solid var(--border); margin-top: 10px; }
