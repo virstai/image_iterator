@@ -124,7 +124,8 @@ async function del() {
 }
 
 async function onSaved() {
-  isAdding.value = false;
+  selectedId.value = null;
+  isAdding.value   = false;
   emit('changed');
 }
 
