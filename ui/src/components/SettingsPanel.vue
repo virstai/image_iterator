@@ -1,8 +1,7 @@
 <template>
-  <aside class="panel">
+  <div style="flex:1;overflow-y:auto;padding:20px 24px;max-width:600px">
     <div class="panel-header">
       <h2>Global Settings</h2>
-      <button class="close-btn" @click="$emit('close')">&#x2715;</button>
     </div>
 
     <div class="row">
@@ -41,10 +40,9 @@
 
     <div class="panel-actions">
       <button class="primary"   @click="save">Save</button>
-      <button class="secondary" @click="$emit('close')">Cancel</button>
       <button class="secondary" @click="reloadAssets">Reload asset lists</button>
     </div>
-  </aside>
+  </div>
 </template>
 
 <script setup>
@@ -55,7 +53,7 @@ const props = defineProps({
   config: { type: Object, default: () => ({}) },
   assets: { type: Object, default: () => ({ llm: [] }) },
 });
-const emit = defineEmits(['saved', 'close']);
+const emit = defineEmits(['saved']);
 
 const form = reactive({
   llmBaseUrl:            '',
