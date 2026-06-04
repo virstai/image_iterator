@@ -30,7 +30,7 @@ This is an active refactor branch. **Do not merge to main until all phases are c
 | Phase | Status | Summary |
 |-------|--------|---------|
 | 1 — Rename + step registry + LLM abstraction | ✅ Done | Committed `2bd2627` |
-| 2 — Workflow entity | ⏳ Next | See below |
+| 2 — Workflow entity | ✅ Done | |
 | 3 — Reference handling | Pending | img2img, vision notes, drop zone |
 | 4 — Upscale step | Pending | upscale.js, multi-step UI |
 | 5 — Reference adapters | Pending | IPAdapter/Redux/Kontext |

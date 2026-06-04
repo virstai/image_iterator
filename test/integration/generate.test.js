@@ -40,7 +40,7 @@ before(async () => {
     comfyuiUrl:            `http://127.0.0.1:${comfyPort}`,
     llmModel:              'test-model',
     llmProvider:           'ollama',
-    activeModel:           'test-sd15',
+    activeWorkflow:        'test-wf-sd15',
     maxIterations:         3,
     humanReview:           false,
     acceptanceGracePeriod: 0,  // disabled by default so tests don't wait
@@ -48,6 +48,12 @@ before(async () => {
       'test-sd15': {
         id: 'test-sd15', label: 'Test SD1.5', architecture: 'sd15',
         checkpoint: 'test.safetensors',
+      },
+    },
+    workflows: {
+      'test-wf-sd15': {
+        id: 'test-wf-sd15', label: 'Test Workflow SD1.5',
+        steps: [{ type: 'generate', modelId: 'test-sd15', params: {}, review: {} }],
       },
     },
   }));
@@ -126,12 +132,12 @@ test('runs up to maxIterations when every iteration is rejected', async () => {
 
 // ── POST /api/generate/run ────────────────────────────────────────────────────
 
-test('POST /api/generate/run accepts humanReview=false and modelId overrides', async () => {
+test('POST /api/generate/run accepts humanReview=false and workflowId overrides', async () => {
   reviewVerdict = 'ACCEPT';
   const events = await collectSSE(`${base()}/api/generate/run`, {
     prompt:      'a sunset over the ocean',
     humanReview: false,
-    modelId:     'test-sd15',
+    workflowId:  'test-wf-sd15',
     overrides:   { width: 768, height: 512 },
   });
 
@@ -152,11 +158,11 @@ test('POST /api/generate/run returns 400 for missing prompt', async () => {
   assert.equal(body.error, 'prompt is required');
 });
 
-test('POST /api/generate/run returns 400 for unknown modelId', async () => {
+test('POST /api/generate/run returns 400 for unknown workflowId', async () => {
   const res = await fetch(`${base()}/api/generate/run`, {
     method:  'POST',
     headers: { 'Content-Type': 'application/json' },
-    body:    JSON.stringify({ prompt: 'test', modelId: 'ghost-model' }),
+    body:    JSON.stringify({ prompt: 'test', workflowId: 'ghost-workflow' }),
   });
   assert.equal(res.status, 400);
 });
@@ -284,14 +290,14 @@ test('DELETE /api/generate/sessions/:id removes the session', async () => {
   assert.equal(get.status, 404);
 });
 
-// ── POST /api/sessions/skills/:modelId/refresh ────────────────────────────────
+// ── POST /api/sessions/skills/:workflowId/refresh ────────────────────────────────
 
-test('POST /api/sessions/skills/test-sd15/refresh returns updated skill data', async () => {
-  // Run a session first so outcome data exists for the model
+test('POST /api/sessions/skills/test-wf-sd15/refresh returns updated skill data', async () => {
+  // Run a session first so outcome data exists for the workflow
   reviewVerdict = 'ACCEPT';
   await collectSSE(`${base()}/api/generate`, { prompt: 'skill refresh seed' });
 
-  const res = await fetch(`${base()}/api/sessions/skills/test-sd15/refresh`, {
+  const res = await fetch(`${base()}/api/sessions/skills/test-wf-sd15/refresh`, {
     method:  'POST',
     headers: { 'Content-Type': 'application/json' },
     body:    JSON.stringify({}),
@@ -302,8 +308,8 @@ test('POST /api/sessions/skills/test-sd15/refresh returns updated skill data', a
   assert.ok(data.skillUpdatedAt, 'should have a skillUpdatedAt timestamp');
 });
 
-test('POST /api/sessions/skills/test-sd15/refresh with correction note updates skill', async () => {
-  const res = await fetch(`${base()}/api/sessions/skills/test-sd15/refresh`, {
+test('POST /api/sessions/skills/test-wf-sd15/refresh with correction note updates skill', async () => {
+  const res = await fetch(`${base()}/api/sessions/skills/test-wf-sd15/refresh`, {
     method:  'POST',
     headers: { 'Content-Type': 'application/json' },
     body:    JSON.stringify({ note: 'Always use danbooru tags, never natural language.' }),
@@ -313,8 +319,8 @@ test('POST /api/sessions/skills/test-sd15/refresh with correction note updates s
   assert.ok(data.skill, 'should return updated skill data after correction note');
 });
 
-test('POST /api/sessions/skills/unknown-model/refresh returns 404', async () => {
-  const res = await fetch(`${base()}/api/sessions/skills/unknown-model/refresh`, {
+test('POST /api/sessions/skills/unknown-workflow/refresh returns 404', async () => {
+  const res = await fetch(`${base()}/api/sessions/skills/unknown-workflow/refresh`, {
     method:  'POST',
     headers: { 'Content-Type': 'application/json' },
     body:    JSON.stringify({}),

@@ -15,9 +15,9 @@ function genId() {
   return Date.now().toString(36) + Math.random().toString(36).slice(2);
 }
 
-async function refreshSkill(modelId, modelLabel, arch, correctionNote = '') {
+async function refreshSkill(workflowId, workflowLabel, arch, correctionNote = '') {
   const cfg = config.load();
-  const data = skills.get(modelId);
+  const data = skills.get(workflowId);
   if (!data) return;
 
   const o = data.outcomes;
@@ -33,7 +33,7 @@ async function refreshSkill(modelId, modelLabel, arch, correctionNote = '') {
   const currentBlacklist = currentAutoNotes.filter(n => n.type === 'blacklist').flatMap(n => n.words ?? []);
 
   const userContent =
-    `Model: ${modelLabel} (architecture: ${arch})\n\n` +
+    `Workflow: ${workflowLabel} (architecture: ${arch})\n\n` +
     `Outcome data:\n${statsText}\n\n` +
     `Current skill text:\n${data.skill ?? 'None yet — write a fresh one.'}\n\n` +
     (currentEnforce.length
@@ -76,13 +76,13 @@ async function refreshSkill(modelId, modelLabel, arch, correctionNote = '') {
   }
 
   const newSkill = (sections.SKILL ?? []).join('\n').trim() || raw.trim();
-  skills.setSkill(modelId, newSkill);
+  skills.setSkill(workflowId, newSkill);
 
   const enforceLines   = sections.ENFORCE ?? [];
   const blacklistWords = (sections.BLACKLIST ?? []).join(',').split(',').map(w => w.trim()).filter(Boolean);
 
   if (enforceLines.length || blacklistWords.length) {
-    const latest    = skills.get(modelId);
+    const latest    = skills.get(workflowId);
     const userNotes = (latest.notes ?? []).filter(n => !n.auto);
     const autoNotes = (latest.notes ?? []).filter(n => n.auto);
     const merged    = [];
@@ -108,10 +108,10 @@ async function refreshSkill(modelId, modelLabel, arch, correctionNote = '') {
       merged.push(...autoNotes.filter(n => n.type === 'blacklist'));
     }
 
-    skills.saveNotes(modelId, [...userNotes, ...merged]);
+    skills.saveNotes(workflowId, [...userNotes, ...merged]);
   }
 
-  console.log(`[skills] updated skill for ${modelId}${correctionNote ? ' (manual correction)' : ''}`);
+  console.log(`[skills] updated skill for ${workflowId}${correctionNote ? ' (manual correction)' : ''}`);
 }
 
 module.exports = { refreshSkill, LOCAL_PREAMBLE };

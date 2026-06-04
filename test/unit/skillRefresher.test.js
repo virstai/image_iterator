@@ -53,7 +53,7 @@ function seedModel(id, accepts, rejects) {
   const dir = process.env.SKILLS_DIR;
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(path.join(dir, `${id}.json`), JSON.stringify({
-    modelId: id, modelLabel: id, architecture: 'sd15',
+    workflowId: id, workflowLabel: id, architecture: 'sd15',
     skill: null, skillUpdatedAt: null,
     outcomes: { accepts, rejects },
     notes: [],

@@ -11,12 +11,19 @@ const GLOBAL_DEFAULTS = {
   comfyuiUrl:             'http://127.0.0.1:8188',
   llmProvider:            'ollama',
   llmModel:               '',
-  activeModel:            null,
+  activeWorkflow:         null,
   maxIterations:          3,
   humanReview:            false,
   acceptanceGracePeriod:  10, // seconds; 0 = disabled
   models:                 {},
+  workflows:              {},
 };
+
+// Model loader fields only — sampling params live in workflow steps.
+const MODEL_LOADER_FIELDS = new Set([
+  'id', 'label', 'architecture', 'checkpoint', 'unetName', 'clipL', 't5xxl',
+  'clipName', 'vaeName', 'vae', 'useRefiner', 'refinerCheckpoint',
+]);
 
 function load() {
   let saved = {};
@@ -41,20 +48,39 @@ function save(updates) {
   return next;
 }
 
-// Returns the active model config object, or throws if none is set / not found.
-function activeModel() {
+// Returns the active workflow config object, or throws if none is set / not found.
+function activeWorkflow() {
   const cfg = load();
-  if (!cfg.activeModel) throw new Error('No active model selected. Configure one in Settings.');
-  const model = cfg.models[cfg.activeModel];
-  if (!model) throw new Error(`Active model "${cfg.activeModel}" not found in config.`);
-  return model;
+  if (!cfg.activeWorkflow) throw new Error('No active workflow selected. Configure one in Workflows.');
+  const workflow = cfg.workflows[cfg.activeWorkflow];
+  if (!workflow) throw new Error(`Active workflow "${cfg.activeWorkflow}" not found in config.`);
+  return workflow;
 }
 
-// Upsert a model entry. id is the key; if omitted a slug is generated from the label.
+// Upsert a workflow entry. id is the key; if omitted a slug is generated from the label.
+function saveWorkflow(id, workflowData) {
+  const cfg = load();
+  const resolvedId = id || slugify(workflowData.label);
+  cfg.workflows[resolvedId] = { ...workflowData, id: resolvedId };
+  save(cfg);
+  return cfg.workflows[resolvedId];
+}
+
+function deleteWorkflow(id) {
+  const cfg = load();
+  delete cfg.workflows[id];
+  if (cfg.activeWorkflow === id) cfg.activeWorkflow = null;
+  save(cfg);
+}
+
+// Upsert a model entry, keeping only loader fields.
 function saveModel(id, modelData) {
   const cfg = load();
   const resolvedId = id || slugify(modelData.label);
-  cfg.models[resolvedId] = { ...modelData, id: resolvedId };
+  const loaderData = Object.fromEntries(
+    Object.entries(modelData).filter(([k]) => MODEL_LOADER_FIELDS.has(k)),
+  );
+  cfg.models[resolvedId] = { ...loaderData, id: resolvedId };
   save(cfg);
   return cfg.models[resolvedId];
 }
@@ -62,7 +88,6 @@ function saveModel(id, modelData) {
 function deleteModel(id) {
   const cfg = load();
   delete cfg.models[id];
-  if (cfg.activeModel === id) cfg.activeModel = null;
   save(cfg);
 }
 
@@ -70,4 +95,4 @@ function slugify(str) {
   return str.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || Date.now().toString();
 }
 
-module.exports = { load, save, activeModel, saveModel, deleteModel };
+module.exports = { load, save, activeWorkflow, saveWorkflow, deleteWorkflow, saveModel, deleteModel };

@@ -5,7 +5,7 @@
       :arch-meta="configState.archMeta"
       :active-panel="activePanel"
       @open-panel="openPanel"
-      @set-active-model="setActiveModel"
+      @set-active-workflow="setActiveWorkflow"
     />
 
     <SettingsPanel
@@ -13,6 +13,15 @@
       :config="configState.config"
       :assets="configState.assets"
       @saved="onSettingsSaved"
+      @close="activePanel = null"
+    />
+
+    <WorkflowsPanel
+      v-if="activePanel === 'workflows'"
+      :config="configState.config"
+      :assets="configState.assets"
+      :arch-meta="configState.archMeta"
+      @changed="onConfigChanged"
       @close="activePanel = null"
     />
 
@@ -39,7 +48,7 @@
       @generate="onGenerate"
       @continue="onContinue"
       @clear="clearSession"
-      @open-models="openPanel('models')"
+      @open-workflows="openPanel('workflows')"
       @open-settings="openPanel('settings')"
     />
 
@@ -57,12 +66,13 @@
 import { ref, onMounted } from 'vue';
 import AppHeader      from './components/AppHeader.vue';
 import SettingsPanel  from './components/SettingsPanel.vue';
+import WorkflowsPanel from './components/WorkflowsPanel.vue';
 import ModelsPanel    from './components/ModelsPanel.vue';
 import HistoryPanel   from './components/HistoryPanel.vue';
 import GenerateSection from './components/GenerateSection.vue';
 import RunSection     from './components/RunSection.vue';
 
-import { configState, loadConfig, loadAssets, setActiveModel as storeSetActiveModel } from './stores/config.js';
+import { configState, loadConfig, loadAssets, setActiveWorkflow as storeSetActiveWorkflow } from './stores/config.js';
 import { genState, startGeneration, continueSession, loadSession, clearSession, connectToBroadcast } from './stores/generate.js';
 
 const activePanel = ref(null);
@@ -81,8 +91,8 @@ function openPanel(name) {
   activePanel.value = activePanel.value === name ? null : name;
 }
 
-async function setActiveModel(id) {
-  await storeSetActiveModel(id);
+async function setActiveWorkflow(id) {
+  await storeSetActiveWorkflow(id);
 }
 
 async function onSettingsSaved() {

@@ -42,7 +42,7 @@ function waitForAcceptanceGrace(key, seconds) {
   });
 }
 
-// ── Step execution ────────────────────────────────────────────────────────────
+// ── Step execution ────────────────────────────────────────────────────────────────
 
 async function runStep(stepDef, stepIndex, session, ctx, cfg, res) {
   const stepType = steps.get(stepDef.type);
@@ -53,7 +53,7 @@ async function runStep(stepDef, stepIndex, session, ctx, cfg, res) {
   if (stepDef.type === 'generate') {
     const modelConfig = cfg.models?.[stepDef.modelId];
     if (!modelConfig) throw new Error(`Model "${stepDef.modelId}" not found in config`);
-    ctx = { ...ctx, modelConfig, skillId: stepDef.modelId };
+    ctx = { ...ctx, modelConfig, skillId: session.workflowId };
   }
 
   // Per-step review settings, falling back to global config
@@ -158,7 +158,7 @@ async function runStep(stepDef, stepIndex, session, ctx, cfg, res) {
       }
 
       if (stepDef.type === 'generate') {
-        skills.record(stepDef.modelId, stepData.label, ctx.modelConfig?.architecture, accepted ? 'ACCEPT' : 'REJECT');
+        skills.record(session.workflowId, session.workflowLabel, ctx.modelConfig?.architecture, accepted ? 'ACCEPT' : 'REJECT');
       }
       db.saveSession(session);
     }
@@ -183,7 +183,7 @@ async function runStep(stepDef, stepIndex, session, ctx, cfg, res) {
   return { accepted, outputImageUrl: stepData.outputImageUrl };
 }
 
-// ── Pipeline execution ────────────────────────────────────────────────────────
+// ── Pipeline execution ────────────────────────────────────────────────────────────
 
 async function runPipeline(session, pipelineDef, cfg, res) {
   const tag = session.id.slice(0, 8);
@@ -224,11 +224,14 @@ async function runPipeline(session, pipelineDef, cfg, res) {
   } finally {
     db.saveSession(session);
     res.end();
-    for (const stepDef of pipelineDef) {
-      if (stepDef.type === 'generate' && stepDef.modelId) {
-        const modelConfig = cfg.models?.[stepDef.modelId];
+    // Refresh skill for this workflow using the first generate step's model arch
+    if (session.workflowId) {
+      const workflow = cfg.workflows?.[session.workflowId];
+      if (workflow) {
+        const firstGenStep = pipelineDef.find(s => s.type === 'generate');
+        const modelConfig  = firstGenStep ? cfg.models?.[firstGenStep.modelId] : null;
         if (modelConfig) {
-          refreshSkill(stepDef.modelId, modelConfig.label, modelConfig.architecture)
+          refreshSkill(session.workflowId, workflow.label, modelConfig.architecture)
             .catch(err => console.error(`[${tag}] skill refresh failed: ${err.message}`));
         }
       }
@@ -236,10 +239,9 @@ async function runPipeline(session, pipelineDef, cfg, res) {
   }
 }
 
-// ── Route helpers ─────────────────────────────────────────────────────────────
+// ── Route helpers ─────────────────────────────────────────────────────────────────
 
 // Split request overrides into generation params and per-step review config.
-// Preserves backward compat for clients passing maxIterations/humanReview/acceptanceGracePeriod in overrides.
 function splitOverrides(overrides = {}) {
   const { maxIterations, humanReview, acceptanceGracePeriod, ...genParams } = overrides;
   const review = {};
@@ -249,8 +251,14 @@ function splitOverrides(overrides = {}) {
   return { genParams, review };
 }
 
-function buildPipelineDef(modelId, genParams, review) {
-  return [{ type: 'generate', modelId, params: genParams, review }];
+// Build pipelineDef from a workflow's steps, merging in per-request overrides.
+function buildPipelineFromWorkflow(workflow, genParams, review) {
+  return workflow.steps.map(stepDef => {
+    const merged = { ...stepDef };
+    if (Object.keys(genParams).length) merged.params = { ...(stepDef.params ?? {}), ...genParams };
+    if (Object.keys(review).length)    merged.review = { ...(stepDef.review ?? {}), ...review };
+    return merged;
+  });
 }
 
 function buildSessionSteps(pipelineDef, cfg) {
@@ -263,14 +271,14 @@ function buildSessionSteps(pipelineDef, cfg) {
   }));
 }
 
-// ── Routes ────────────────────────────────────────────────────────────────────
+// ── Routes ────────────────────────────────────────────────────────────────────────
 
-// POST /api/generate — start a new session
+// POST /api/generate — start a new session using the active workflow
 router.post('/', async (req, res) => {
   const cfg = config.load();
 
-  let modelConfig;
-  try { modelConfig = config.activeModel(); }
+  let workflow;
+  try { workflow = config.activeWorkflow(); }
   catch (err) { return res.status(400).json({ error: err.message }); }
 
   if (!cfg.llmModel) return res.status(400).json({ error: 'No LLM model configured. Set it in Settings first.' });
@@ -279,17 +287,16 @@ router.post('/', async (req, res) => {
   if (!prompt?.trim()) return res.status(400).json({ error: 'prompt is required' });
 
   const { genParams, review } = splitOverrides(overrides);
-  const pipelineDef = buildPipelineDef(cfg.activeModel, genParams, review);
+  const pipelineDef = buildPipelineFromWorkflow(workflow, genParams, review);
 
   const session = {
-    id:         uuidv4(),
-    prompt:     prompt.trim(),
-    modelId:    cfg.activeModel,
-    modelLabel: modelConfig.label,
-    workflowId: null,
-    steps:      buildSessionSteps(pipelineDef, cfg),
-    status:     'running',
-    createdAt:  new Date().toISOString(),
+    id:            uuidv4(),
+    prompt:        prompt.trim(),
+    workflowId:    workflow.id,
+    workflowLabel: workflow.label,
+    steps:         buildSessionSteps(pipelineDef, cfg),
+    status:        'running',
+    createdAt:     new Date().toISOString(),
   };
   sessions.set(session.id, session);
   db.saveSession(session);
@@ -311,19 +318,15 @@ router.post('/continue/:id', async (req, res) => {
   if (!session) return res.status(404).json({ error: 'Session not found' });
   if (!session.steps?.length) return res.status(400).json({ error: 'Session has no steps.' });
 
+  const workflow = cfg.workflows?.[session.workflowId];
+  if (!workflow) return res.status(400).json({ error: `Workflow "${session.workflowId}" not found.` });
+
   session.status = 'running';
   sessions.set(session.id, session);
 
   const { overrides = {} } = req.body;
   const { genParams, review } = splitOverrides(overrides);
-
-  // Reconstruct pipelineDef from stored steps
-  const pipelineDef = session.steps.map(st => ({
-    type:    st.type,
-    modelId: st.modelId ?? session.modelId,
-    params:  genParams,
-    review,
-  }));
+  const pipelineDef = buildPipelineFromWorkflow(workflow, genParams, review);
 
   res.set({ 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', 'Connection': 'keep-alive', 'X-Session-Id': session.id });
   res.flushHeaders();
@@ -346,7 +349,7 @@ router.get('/sessions', (req, res) => {
   res.json(db.listSessions().map(s => ({
     id:             s.id,
     prompt:         s.prompt,
-    modelLabel:     s.modelLabel,
+    workflowLabel:  s.workflowLabel,
     status:         s.status,
     createdAt:      s.createdAt,
     updatedAt:      s.updatedAt,
@@ -372,19 +375,19 @@ router.delete('/sessions/:id', (req, res) => {
   res.status(204).end();
 });
 
-// POST /api/generate/run — full per-request control
+// POST /api/generate/run — full per-request control (also used by sdapi shim)
 router.post('/run', async (req, res) => {
   const cfg = config.load();
 
-  const { prompt, overrides = {}, humanReview, acceptanceGracePeriod, modelId } = req.body;
+  const { prompt, overrides = {}, humanReview, acceptanceGracePeriod, workflowId } = req.body;
   if (!prompt?.trim()) return res.status(400).json({ error: 'prompt is required' });
 
-  let modelConfig;
-  if (modelId) {
-    modelConfig = cfg.models?.[modelId];
-    if (!modelConfig) return res.status(400).json({ error: `Model "${modelId}" not found` });
+  let workflow;
+  if (workflowId) {
+    workflow = cfg.workflows?.[workflowId];
+    if (!workflow) return res.status(400).json({ error: `Workflow "${workflowId}" not found` });
   } else {
-    try { modelConfig = config.activeModel(); }
+    try { workflow = config.activeWorkflow(); }
     catch (err) { return res.status(400).json({ error: err.message }); }
   }
 
@@ -395,18 +398,16 @@ router.post('/run', async (req, res) => {
   if (humanReview           !== undefined) review.humanReview = !!humanReview;
   if (acceptanceGracePeriod !== undefined) review.gracePeriod = Number(acceptanceGracePeriod);
 
-  const resolvedModelId = modelId ?? cfg.activeModel;
-  const pipelineDef = buildPipelineDef(resolvedModelId, genParams, review);
+  const pipelineDef = buildPipelineFromWorkflow(workflow, genParams, review);
 
   const session = {
-    id:         uuidv4(),
-    prompt:     prompt.trim(),
-    modelId:    resolvedModelId,
-    modelLabel: modelConfig.label,
-    workflowId: null,
-    steps:      buildSessionSteps(pipelineDef, cfg),
-    status:     'running',
-    createdAt:  new Date().toISOString(),
+    id:            uuidv4(),
+    prompt:        prompt.trim(),
+    workflowId:    workflow.id,
+    workflowLabel: workflow.label,
+    steps:         buildSessionSteps(pipelineDef, cfg),
+    status:        'running',
+    createdAt:     new Date().toISOString(),
   };
   sessions.set(session.id, session);
   db.saveSession(session);
@@ -434,7 +435,6 @@ router.post('/sessions/:id/refuse-accepted', (req, res) => {
   const session = sessions.get(req.params.id) ?? db.loadSession(req.params.id);
   if (!session) return res.status(404).json({ error: 'Session not found' });
 
-  // Find the most recently accepted iteration across all steps (search from last step)
   let found = null;
   let foundStepIndex = -1;
   for (let si = session.steps.length - 1; si >= 0 && !found; si--) {

@@ -39,7 +39,7 @@ const props = defineProps({
   loadedDesc: { type: String,  default: null },
   config:     { type: Object,  default: () => ({}) },
 });
-const emit = defineEmits(['generate', 'continue', 'clear', 'open-models', 'open-settings']);
+const emit = defineEmits(['generate', 'continue', 'clear', 'open-workflows', 'open-settings']);
 
 const description = ref('');
 
@@ -48,8 +48,8 @@ watch(() => props.loadedDesc, val => { if (val) description.value = val; });
 function generate() {
   const desc = description.value.trim();
   if (!desc) return alert('Enter a description first.');
-  if (!props.config.activeModel) { emit('open-models'); return alert('Select an active model first.'); }
-  if (!props.config.ollamaModel) { emit('open-settings'); return alert('Set an Ollama model in Settings first.'); }
+  if (!props.config.activeWorkflow) { emit('open-workflows'); return alert('Select an active workflow first.'); }
+  if (!props.config.llmModel) { emit('open-settings'); return alert('Set an LLM model in Settings first.'); }
   emit('generate', desc);
 }
 

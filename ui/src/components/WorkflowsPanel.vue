@@ -1,32 +1,38 @@
 <template>
   <aside class="panel">
     <div class="panel-header">
-      <h2>Models</h2>
+      <h2>Workflows</h2>
       <button class="close-btn" @click="$emit('close')">&#x2715;</button>
     </div>
 
-    <div v-if="!editingId && !isAdding" id="model-list-section">
-      <ul id="model-list">
-        <li v-if="!Object.keys(config.models ?? {}).length" style="color:var(--muted);font-size:13px;padding:8px 0">
-          No models configured yet.
+    <div v-if="!editingId && !isAdding" id="workflow-list-section">
+      <ul id="workflow-list">
+        <li v-if="!Object.keys(config.workflows ?? {}).length" style="color:var(--muted);font-size:13px;padding:8px 0">
+          No workflows configured yet.
         </li>
-        <li v-for="(m, id) in config.models" :key="id">
+        <li
+          v-for="(wf, id) in config.workflows"
+          :key="id"
+          :class="{ active: id === config.activeWorkflow }"
+        >
           <div class="model-info">
-            <span class="model-label">{{ m.label || id }}</span>
-            <span class="model-arch">{{ archMeta[m.architecture]?.label || m.architecture || '—' }}</span>
+            <span class="model-label">{{ wf.label || id }}</span>
+            <span class="model-arch">{{ wf.steps?.length ?? 0 }} step{{ wf.steps?.length !== 1 ? 's' : '' }}</span>
           </div>
           <div class="model-actions">
+            <button class="small secondary" @click="setActive(id)">Use</button>
             <button class="small secondary" @click="openEditor(id)">Edit</button>
           </div>
         </li>
       </ul>
-      <button class="primary" @click="openEditor(null)">+ Add model</button>
+      <button class="primary" @click="openEditor(null)">+ Add workflow</button>
     </div>
 
-    <ModelEditor
+    <WorkflowEditor
       v-else
-      :model-id="editingId"
-      :model="editingId ? config.models[editingId] : null"
+      :workflow-id="editingId"
+      :workflow="editingId ? config.workflows[editingId] : null"
+      :config="config"
       :arch-meta="archMeta"
       :assets="assets"
       @saved="onSaved"
@@ -38,8 +44,8 @@
 
 <script setup>
 import { ref, onMounted } from 'vue';
-import ModelEditor from './ModelEditor.vue';
-import { saveModel, deleteModel, loadAssets } from '../stores/config.js';
+import WorkflowEditor from './WorkflowEditor.vue';
+import { setActiveWorkflow, loadAssets } from '../stores/config.js';
 
 const props = defineProps({
   config:   { type: Object, default: () => ({}) },
@@ -52,6 +58,11 @@ const editingId = ref(null);
 const isAdding  = ref(false);
 
 onMounted(() => { loadAssets().catch(() => {}); });
+
+async function setActive(id) {
+  await setActiveWorkflow(id);
+  emit('changed');
+}
 
 function openEditor(id) {
   editingId.value = id;
