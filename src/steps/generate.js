@@ -95,6 +95,19 @@ async function prepare(stepDef, ctx, previousIterations, onToken) {
     ? buildInitialMessages(userPrompt, architecture, archDefaults, skillSummary)
     : buildRefinementMessages(userPrompt, previousIterations, architecture, skillSummary);
 
+  // Vision notes: fetch all references as base64 and inject before the user
+  // message so the LLM can use them as compositional guidance when building the prompt.
+  const refs = ctx.references ?? [];
+  if (stepDef.referenceStrategy?.visionNotes && refs.length > 0) {
+    const refImages = await Promise.all(refs.map(async ref => {
+      const url = `${cfg.comfyuiUrl}/view?filename=${encodeURIComponent(ref.filename)}&subfolder=${encodeURIComponent(ref.subfolder ?? '')}&type=${encodeURIComponent(ref.type ?? 'input')}`;
+      const r = await fetch(url);
+      if (!r.ok) throw new Error(`Failed to fetch reference image: ${r.status}`);
+      return Buffer.from(await r.arrayBuffer()).toString('base64');
+    }));
+    messages.splice(1, 0, { role: 'user', content: 'Reference images for composition guidance:', images: refImages });
+  }
+
   const raw    = await llm.chatStream(cfg, messages, onToken);
   const prompt = parsePromptResponse(raw);
 
@@ -110,7 +123,25 @@ async function prepare(stepDef, ctx, previousIterations, onToken) {
 
 // Build the ComfyUI workflow graph for this iteration.
 function buildComfyWorkflow(stepDef, prepareResult, ctx) {
-  const { workflow } = buildArchWorkflow(ctx.modelConfig, prepareResult.params);
+  const rs   = stepDef.referenceStrategy?.diffusion;
+  const refs = ctx.references ?? [];
+
+  let initImage = null;
+  let denoise   = 0.6;
+
+  if (refs.length === 1 && rs?.one?.mode === 'init-image') {
+    initImage = refs[0];
+    denoise   = rs.one.denoise ?? 0.6;
+  } else if (refs.length > 1 && rs?.many?.mode === 'init-image') {
+    initImage = refs[0]; // first ref only; adapter (many refs) is Phase 5
+    denoise   = rs.many.denoise ?? 0.6;
+  }
+  // refs.length > 1 && rs?.many?.mode === 'adapter' → Phase 5, falls through to txt2img
+
+  const { workflow } = buildArchWorkflow(ctx.modelConfig, {
+    ...prepareResult.params,
+    ...(initImage ? { initImage, denoise } : {}),
+  });
   return workflow;
 }
 

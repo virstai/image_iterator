@@ -214,7 +214,7 @@ export function readSSEStream(response, onDone) {
   })();
 }
 
-export async function startGeneration(prompt) {
+export async function startGeneration(prompt, references = []) {
   _hasDirectStream    = true;
   genState.running    = true;
   genState.steps      = [];
@@ -225,7 +225,7 @@ export async function startGeneration(prompt) {
   const response = await fetch('/api/generate', {
     method:  'POST',
     headers: { 'Content-Type': 'application/json' },
-    body:    JSON.stringify({ prompt }),
+    body:    JSON.stringify({ prompt, references }),
   });
   if (!response.ok) {
     const err = await response.json().catch(() => ({ error: response.statusText }));
@@ -237,7 +237,7 @@ export async function startGeneration(prompt) {
   readSSEStream(response, () => { genState.running = false; _hasDirectStream = false; });
 }
 
-export async function continueSession(sessionId) {
+export async function continueSession(sessionId, references = []) {
   _hasDirectStream   = true;
   genState.running   = true;
   genState.status    = 'Continuing session…';
@@ -246,7 +246,7 @@ export async function continueSession(sessionId) {
   const response = await fetch(`/api/generate/continue/${sessionId}`, {
     method:  'POST',
     headers: { 'Content-Type': 'application/json' },
-    body:    JSON.stringify({}),
+    body:    JSON.stringify({ references }),
   });
   if (!response.ok) {
     const err = await response.json().catch(() => ({ error: response.statusText }));

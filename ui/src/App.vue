@@ -104,14 +104,14 @@ async function onConfigChanged() {
   // no-op — store already refreshed config
 }
 
-async function onGenerate(prompt) {
+async function onGenerate(prompt, references) {
   activePanel.value = null;
-  await startGeneration(prompt);
+  await startGeneration(prompt, references);
 }
 
-async function onContinue(sessionId) {
+async function onContinue(sessionId, references) {
   activePanel.value = null;
-  await continueSession(sessionId);
+  await continueSession(sessionId, references);
 }
 
 async function onLoadSession(sessionId) {

@@ -77,6 +77,37 @@
           <input type="checkbox" v-model="step.humanReview"> Require human review
         </label>
       </div>
+
+      <!-- Reference strategy -->
+      <div class="review-block">
+        <strong>References</strong>
+        <label class="checkbox-label">
+          <input type="checkbox" v-model="step.visionNotes"> Pass all references to LLM for composition guidance
+        </label>
+        <div class="row" style="margin-top:6px">
+          <label>When one reference
+            <select v-model="step.refOneMode">
+              <option value="txt2img">Ignore (txt2img)</option>
+              <option value="init-image">Use as init image (img2img)</option>
+            </select>
+          </label>
+          <label v-if="step.refOneMode === 'init-image'">Denoise strength
+            <input type="number" v-model.number="step.refOneDenoise" min="0.01" max="1" step="0.05" placeholder="0.6">
+          </label>
+        </div>
+        <div class="row">
+          <label>When many references
+            <select v-model="step.refManyMode">
+              <option value="txt2img">Ignore (txt2img)</option>
+              <option value="init-image">Use first as init image (img2img)</option>
+              <option value="adapter" disabled>Adapter — Phase 5</option>
+            </select>
+          </label>
+          <label v-if="step.refManyMode === 'init-image'">Denoise strength
+            <input type="number" v-model.number="step.refManyDenoise" min="0.01" max="1" step="0.05" placeholder="0.6">
+          </label>
+        </div>
+      </div>
     </div>
 
     <button class="secondary" style="margin-top:8px" @click="addStep">+ Add generate step</button>
@@ -173,6 +204,8 @@ function blankStep() {
     modelId: '', width: '', height: '', steps: '', cfgScale: '', guidance: '',
     sampler: '', scheduler: '', negativePrompt: '', refinerSwitchAt: '',
     maxIterations: '', humanReview: false, gracePeriod: '',
+    visionNotes: false, refOneMode: 'txt2img', refOneDenoise: 0.6,
+    refManyMode: 'txt2img', refManyDenoise: 0.6,
   };
 }
 
@@ -195,6 +228,11 @@ watch(() => props.workflow, wf => {
     maxIterations:  s.review?.maxIterations  ?? '',
     humanReview:    s.review?.humanReview    ?? false,
     gracePeriod:    s.review?.gracePeriod    ?? '',
+    visionNotes:    s.referenceStrategy?.visionNotes ?? false,
+    refOneMode:     s.referenceStrategy?.diffusion?.one?.mode  ?? 'txt2img',
+    refOneDenoise:  s.referenceStrategy?.diffusion?.one?.denoise ?? 0.6,
+    refManyMode:    s.referenceStrategy?.diffusion?.many?.mode ?? 'txt2img',
+    refManyDenoise: s.referenceStrategy?.diffusion?.many?.denoise ?? 0.6,
   }));
   if (!form.steps.length) form.steps = [blankStep()];
 }, { immediate: true });
@@ -309,6 +347,18 @@ async function save() {
       ...(s.maxIterations !== '' && { maxIterations: Number(s.maxIterations) }),
       ...(s.gracePeriod   !== '' && { gracePeriod:   Number(s.gracePeriod) }),
       humanReview: s.humanReview,
+    },
+    referenceStrategy: {
+      visionNotes: s.visionNotes,
+      diffusion: {
+        none: 'txt2img',
+        one:  s.refOneMode === 'init-image'
+          ? { mode: 'init-image', denoise: Number(s.refOneDenoise) || 0.6 }
+          : { mode: 'txt2img' },
+        many: s.refManyMode === 'init-image'
+          ? { mode: 'init-image', denoise: Number(s.refManyDenoise) || 0.6 }
+          : { mode: s.refManyMode },
+      },
     },
   }));
 

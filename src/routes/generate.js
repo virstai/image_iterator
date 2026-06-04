@@ -187,7 +187,7 @@ async function runStep(stepDef, stepIndex, session, ctx, cfg, res) {
 
 async function runPipeline(session, pipelineDef, cfg, res) {
   const tag = session.id.slice(0, 8);
-  const ctx = { userPrompt: session.prompt, references: [], cfg };
+  const ctx = { userPrompt: session.prompt, references: session.references ?? [], cfg };
 
   res.on('close', () => {
     for (const [key, p] of pendingReviews) {
@@ -283,7 +283,7 @@ router.post('/', async (req, res) => {
 
   if (!cfg.llmModel) return res.status(400).json({ error: 'No LLM model configured. Set it in Settings first.' });
 
-  const { prompt, overrides = {} } = req.body;
+  const { prompt, references, overrides = {} } = req.body;
   if (!prompt?.trim()) return res.status(400).json({ error: 'prompt is required' });
 
   const { genParams, review } = splitOverrides(overrides);
@@ -294,6 +294,7 @@ router.post('/', async (req, res) => {
     prompt:        prompt.trim(),
     workflowId:    workflow.id,
     workflowLabel: workflow.label,
+    references:    Array.isArray(references) ? references : [],
     steps:         buildSessionSteps(pipelineDef, cfg),
     status:        'running',
     createdAt:     new Date().toISOString(),
@@ -379,7 +380,7 @@ router.delete('/sessions/:id', (req, res) => {
 router.post('/run', async (req, res) => {
   const cfg = config.load();
 
-  const { prompt, overrides = {}, humanReview, acceptanceGracePeriod, workflowId } = req.body;
+  const { prompt, references, overrides = {}, humanReview, acceptanceGracePeriod, workflowId } = req.body;
   if (!prompt?.trim()) return res.status(400).json({ error: 'prompt is required' });
 
   let workflow;
@@ -405,6 +406,7 @@ router.post('/run', async (req, res) => {
     prompt:        prompt.trim(),
     workflowId:    workflow.id,
     workflowLabel: workflow.label,
+    references:    Array.isArray(references) ? references : [],
     steps:         buildSessionSteps(pipelineDef, cfg),
     status:        'running',
     createdAt:     new Date().toISOString(),

@@ -88,4 +88,15 @@ async function getAssets() {
   };
 }
 
-module.exports = { generate, getAssets };
+// ── Image upload ───────────────────────────────────────────────────────────────
+
+async function uploadImage(buffer, filename) {
+  const form = new FormData();
+  form.append('image', new Blob([buffer]), filename);
+  const res = await fetch(`${baseUrl()}/upload/image`, { method: 'POST', body: form });
+  if (!res.ok) throw new Error(`ComfyUI upload error ${res.status}: ${await res.text()}`);
+  const data = await res.json();
+  return { filename: data.name, subfolder: data.subfolder ?? '', type: data.type ?? 'input' };
+}
+
+module.exports = { generate, getAssets, uploadImage };
