@@ -43,7 +43,7 @@
       </div>
     </nav>
 
-    <div v-if="running" class="sidebar-status">
+    <div v-if="running && totalSteps > 0" class="sidebar-status">
       <div class="sidebar-status-header">
         <span class="sidebar-status-label">
           <span class="sidebar-status-dot"></span>
@@ -96,9 +96,10 @@ const activeWorkflowMeta = computed(() => {
   return wf ? stepSummary(wf) : '';
 });
 
+const STEP_LABELS = { generate: 'Generate', upscale: 'Upscale' };
 function stepSummary(wf) {
   if (!wf?.steps?.length) return 'No steps';
-  return wf.steps.map(s => s.type === 'upscale' ? 'Upscale' : 'Generate').join(' · ');
+  return wf.steps.map(s => STEP_LABELS[s.type] ?? s.type).join(' · ');
 }
 
 function selectWorkflow(id) {
