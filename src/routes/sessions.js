@@ -149,10 +149,10 @@ router.get('/assets', async (req, res) => {
   ]);
 
   const comfy  = comfyAssets.status === 'fulfilled' ? comfyAssets.value : { checkpoints: [], vaes: [], clips: [], unets: [], errors: [comfyAssets.reason.message] };
-  const models = llmModels.status   === 'fulfilled' ? llmModels.value   : [];
+  const models = llmModels.status === 'fulfilled' ? llmModels.value : [];
 
   res.json({
-    llm:     models.map(m => m.name),
+    llm:     models,
     comfyui: comfy,
     errors:  [...(comfy.errors || []), ...(llmModels.status === 'rejected' ? [llmModels.reason.message] : [])],
   });

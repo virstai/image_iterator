@@ -24,7 +24,9 @@ before(async () => {
       const parsed = JSON.parse(body);
       lastReceivedMessages = parsed.messages;
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ message: { role: 'assistant', content: skillResponse }, done: true }));
+      res.end(JSON.stringify({
+        choices: [{ index: 0, message: { role: 'assistant', content: skillResponse }, finish_reason: 'stop' }],
+      }));
     });
   });
 

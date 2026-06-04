@@ -6,9 +6,17 @@
     </div>
 
     <div class="row">
-      <label>Ollama URL     <input type="url"    v-model="form.ollamaUrl"  placeholder="http://host:11434"></label>
-      <label>ComfyUI URL    <input type="url"    v-model="form.comfyuiUrl" placeholder="http://host:8188"></label>
+      <label>LLM base URL <span class="hint">(e.g. http://host:11434/v1 for Ollama)</span>
+        <input type="url" v-model="form.llmBaseUrl" placeholder="http://host:11434/v1">
+      </label>
+      <label>ComfyUI URL
+        <input type="url" v-model="form.comfyuiUrl" placeholder="http://host:8188">
+      </label>
     </div>
+
+    <label>API key <span class="hint">(leave blank for Ollama / local providers)</span>
+      <input type="password" v-model="form.llmApiKey" placeholder="sk-…  or leave blank">
+    </label>
 
     <label>LLM model (prompt building &amp; review)
       <select v-model="form.llmModel">
@@ -50,7 +58,8 @@ const props = defineProps({
 const emit = defineEmits(['saved', 'close']);
 
 const form = reactive({
-  ollamaUrl:             '',
+  llmBaseUrl:            '',
+  llmApiKey:             '',
   comfyuiUrl:            '',
   llmModel:              '',
   maxIterations:         '',
@@ -59,7 +68,8 @@ const form = reactive({
 });
 
 watch(() => props.config, cfg => {
-  form.ollamaUrl             = cfg.ollamaUrl             ?? '';
+  form.llmBaseUrl            = cfg.llmBaseUrl            ?? '';
+  form.llmApiKey             = cfg.llmApiKey             ?? '';
   form.comfyuiUrl            = cfg.comfyuiUrl            ?? '';
   form.llmModel              = cfg.llmModel              ?? '';
   form.maxIterations         = cfg.maxIterations         ?? '';
@@ -69,7 +79,8 @@ watch(() => props.config, cfg => {
 
 async function save() {
   await saveConfig({
-    ollamaUrl:             form.ollamaUrl             || null,
+    llmBaseUrl:            form.llmBaseUrl            || null,
+    llmApiKey:             form.llmApiKey             || '',
     comfyuiUrl:            form.comfyuiUrl            || null,
     llmModel:              form.llmModel              || null,
     maxIterations:         form.maxIterations         || null,

@@ -7,9 +7,10 @@ const dataDir    = () => process.env.DATA_DIR    || path.join(__dirname, '../../
 const configPath = () => path.join(dataDir(), 'config.json');
 
 const GLOBAL_DEFAULTS = {
-  ollamaUrl:              'http://127.0.0.1:11434',
+  llmBaseUrl:             'http://127.0.0.1:11434/v1',
+  llmApiKey:              '',
   comfyuiUrl:             'http://127.0.0.1:8188',
-  llmProvider:            'ollama',
+  llmProvider:            'openai',
   llmModel:               '',
   activeWorkflow:         null,
   maxIterations:          3,
@@ -32,12 +33,21 @@ function load() {
   const merged = {
     ...GLOBAL_DEFAULTS,
     ...saved,
-    ...(process.env.OLLAMA_URL   && { ollamaUrl:  process.env.OLLAMA_URL }),
+    // OLLAMA_URL env var: append /v1 to get the OpenAI-compat base URL
+    ...(process.env.OLLAMA_URL   && { llmBaseUrl: process.env.OLLAMA_URL.replace(/\/+$/, '') + '/v1' }),
     ...(process.env.COMFYUI_URL  && { comfyuiUrl: process.env.COMFYUI_URL }),
     ...(process.env.OLLAMA_MODEL && { llmModel:   process.env.OLLAMA_MODEL }),
   };
+
+  // Back-compat: ollamaUrl → llmBaseUrl (configs written before this refactor)
+  if (!merged.llmBaseUrl && merged.ollamaUrl) {
+    merged.llmBaseUrl = merged.ollamaUrl.replace(/\/+$/, '') + '/v1';
+  }
+  // Back-compat: llmProvider 'ollama' → 'openai' (same API, different endpoint)
+  if (merged.llmProvider === 'ollama') merged.llmProvider = 'openai';
   // Back-compat: configs written before llmModel was introduced used ollamaModel.
   if (!merged.llmModel && merged.ollamaModel) merged.llmModel = merged.ollamaModel;
+
   return merged;
 }
 
