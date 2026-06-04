@@ -246,7 +246,6 @@
 
     <div class="panel-actions">
       <button class="primary"               @click="save">Save workflow</button>
-      <button class="secondary"             @click="$emit('cancel')">Cancel</button>
       <button v-if="workflowId" class="danger" @click="remove">Delete</button>
     </div>
   </div>
@@ -263,7 +262,7 @@ const props = defineProps({
   archMeta:   { type: Object, default: () => ({}) },
   assets:     { type: Object, default: () => ({}) },
 });
-const emit = defineEmits(['saved', 'deleted', 'cancel']);
+const emit = defineEmits(['saved', 'deleted']);
 
 const skillData      = ref(null);
 const localNotes     = ref([]);
