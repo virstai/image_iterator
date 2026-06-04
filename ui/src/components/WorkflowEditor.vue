@@ -70,27 +70,19 @@
             <input type="checkbox" v-model="step.visionNotes"> Pass all references to LLM for composition guidance
           </label>
           <div class="row" style="margin-top:6px">
-            <label>When one reference
-              <select v-model="step.refOneMode">
+            <label>Reference mode
+              <select v-model="step.refMode">
                 <option value="txt2img">Ignore (txt2img)</option>
                 <option value="init-image">Use as init image (img2img)</option>
+                <option value="adapter">Adapter conditioning</option>
               </select>
             </label>
-            <label v-if="step.refOneMode === 'init-image'">Denoise strength
-              <input type="number" v-model.number="step.refOneDenoise" min="0.01" max="1" step="0.05" placeholder="0.6">
+            <label v-if="step.refMode === 'init-image'">Denoise strength
+              <input type="number" v-model.number="step.refDenoise" min="0.01" max="1" step="0.05" placeholder="0.6">
             </label>
-          </div>
-          <div class="row">
-            <label>When many references
-              <select v-model="step.refManyMode">
-                <option value="txt2img">Ignore (txt2img)</option>
-                <option value="init-image">Use first as init image (img2img)</option>
-                <option value="adapter" disabled>Adapter — Phase 5</option>
-              </select>
-            </label>
-            <label v-if="step.refManyMode === 'init-image'">Denoise strength
-              <input type="number" v-model.number="step.refManyDenoise" min="0.01" max="1" step="0.05" placeholder="0.6">
-            </label>
+            <p v-if="step.refMode === 'adapter'" class="hint">
+              Adapter model and CLIP Vision model are configured in the model's settings. Works with any number of references.
+            </p>
           </div>
         </div>
       </template>
@@ -291,8 +283,7 @@ function blankGenerateStep() {
     modelId: '', width: '', height: '', steps: '', cfgScale: '', guidance: '',
     sampler: '', scheduler: '', negativePrompt: '', refinerSwitchAt: '',
     maxIterations: '', humanReview: false, gracePeriod: '',
-    visionNotes: false, refOneMode: 'txt2img', refOneDenoise: 0.6,
-    refManyMode: 'txt2img', refManyDenoise: 0.6,
+    visionNotes: false, refMode: 'txt2img', refDenoise: 0.6,
   };
 }
 
@@ -339,11 +330,15 @@ function stepFromDef(s) {
     maxIterations:  s.review?.maxIterations ?? '',
     humanReview:    s.review?.humanReview   ?? false,
     gracePeriod:    s.review?.gracePeriod   ?? '',
-    visionNotes:    s.referenceStrategy?.visionNotes ?? false,
-    refOneMode:     s.referenceStrategy?.diffusion?.one?.mode    ?? 'txt2img',
-    refOneDenoise:  s.referenceStrategy?.diffusion?.one?.denoise ?? 0.6,
-    refManyMode:    s.referenceStrategy?.diffusion?.many?.mode   ?? 'txt2img',
-    refManyDenoise: s.referenceStrategy?.diffusion?.many?.denoise ?? 0.6,
+    visionNotes: s.referenceStrategy?.visionNotes ?? false,
+    refMode:     s.referenceStrategy?.diffusion?.mode
+                   ?? s.referenceStrategy?.diffusion?.many?.mode   // back-compat
+                   ?? s.referenceStrategy?.diffusion?.one?.mode    // back-compat
+                   ?? 'txt2img',
+    refDenoise:  s.referenceStrategy?.diffusion?.denoise
+                   ?? s.referenceStrategy?.diffusion?.one?.denoise  // back-compat
+                   ?? s.referenceStrategy?.diffusion?.many?.denoise // back-compat
+                   ?? 0.6,
   };
 }
 
@@ -505,13 +500,8 @@ async function save() {
       referenceStrategy: {
         visionNotes: s.visionNotes,
         diffusion: {
-          none: 'txt2img',
-          one:  s.refOneMode === 'init-image'
-            ? { mode: 'init-image', denoise: Number(s.refOneDenoise) || 0.6 }
-            : { mode: 'txt2img' },
-          many: s.refManyMode === 'init-image'
-            ? { mode: 'init-image', denoise: Number(s.refManyDenoise) || 0.6 }
-            : { mode: s.refManyMode },
+          mode: s.refMode,
+          ...(s.refMode === 'init-image' && { denoise: Number(s.refDenoise) || 0.6 }),
         },
       },
     };

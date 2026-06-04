@@ -24,6 +24,7 @@ const GLOBAL_DEFAULTS = {
 const MODEL_LOADER_FIELDS = new Set([
   'id', 'label', 'architecture', 'checkpoint', 'unetName', 'clipL', 't5xxl',
   'clipName', 'vaeName', 'vae', 'useRefiner', 'refinerCheckpoint',
+  'adapterModel', 'clipVisionModel', 'adapterWeight',
 ]);
 
 function load() {

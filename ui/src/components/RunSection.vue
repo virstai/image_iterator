@@ -3,6 +3,7 @@
     <div id="status-bar">
       <span id="status-text">{{ status }}</span>
       <span v-if="iterBadge" id="iteration-badge">{{ iterBadge }}</span>
+      <button v-if="running" class="small danger" style="margin-left:auto" @click="kill">Stop</button>
     </div>
 
     <div
@@ -38,13 +39,19 @@
 import { ref, computed, watch } from 'vue';
 import IterationCard  from './IterationCard.vue';
 import IterationModal from './IterationModal.vue';
+import { killGeneration } from '../stores/generate.js';
 
 const props = defineProps({
-  steps:     { type: Array,  default: () => [] },
-  status:    { type: String, default: '' },
-  iterBadge: { type: String, default: '' },
-  sessionId: { type: String, default: null },
+  steps:     { type: Array,   default: () => [] },
+  status:    { type: String,  default: '' },
+  iterBadge: { type: String,  default: '' },
+  sessionId: { type: String,  default: null },
+  running:   { type: Boolean, default: false },
 });
+
+async function kill() {
+  await killGeneration();
+}
 
 const modalKey = ref(null); // { stepIndex, iterN }
 

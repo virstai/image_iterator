@@ -25,6 +25,26 @@ function build(params) {
   }
   const vaeRef = p.vae ? ["8", 0] : ["1", 2];
 
+  // IPAdapter chain: one node per reference image, each threading the model ref forward.
+  // Nodes 50–51 are loaders; 52+ alternate LoadImage/IPAdapter pairs per ref.
+  let modelRef = ["1", 0];
+  if (p.ipAdapterImages?.length && p.adapterModel && p.clipVisionModel) {
+    nodes["50"] = { class_type: "IPAdapterModelLoader", inputs: { model_name: p.adapterModel } };
+    nodes["51"] = { class_type: "CLIPVisionLoader",     inputs: { clip_name: p.clipVisionModel } };
+    const perWeight = (p.adapterWeight ?? 0.6) / p.ipAdapterImages.length;
+    p.ipAdapterImages.forEach((ref, i) => {
+      const imgPath = ref.subfolder ? `${ref.subfolder}/${ref.filename}` : ref.filename;
+      const loadId  = String(52 + i * 2);
+      const ipaId   = String(53 + i * 2);
+      nodes[loadId] = { class_type: "LoadImage", inputs: { image: imgPath } };
+      nodes[ipaId]  = { class_type: "IPAdapter", inputs: {
+        model: modelRef, ip_adapter: ["50", 0], clip_vision: ["51", 0],
+        image: [loadId, 0], weight: perWeight, start_at: 0, end_at: 1,
+      }};
+      modelRef = [ipaId, 0];
+    });
+  }
+
   let latentRef;
   let denoise;
   if (p.initImage) {
@@ -46,7 +66,7 @@ function build(params) {
     inputs: {
       seed, steps: p.steps, cfg: p.cfgScale,
       sampler_name: p.sampler, scheduler: p.scheduler, denoise,
-      model: ["1", 0], positive: ["2", 0], negative: ["3", 0], latent_image: latentRef,
+      model: modelRef, positive: ["2", 0], negative: ["3", 0], latent_image: latentRef,
     },
   };
   nodes["6"] = { class_type: "VAEDecode", inputs: { samples: ["5", 0], vae: vaeRef } };

@@ -108,7 +108,7 @@ async function prepare(stepDef, ctx, previousIterations, onToken) {
     messages.splice(1, 0, { role: 'user', content: 'Reference images for composition guidance:', images: refImages });
   }
 
-  const raw    = await llm.chatStream(cfg, messages, onToken);
+  const raw    = await llm.chatStream(cfg, messages, onToken, { signal: ctx.signal });
   const prompt = parsePromptResponse(raw);
 
   const params = {
@@ -125,18 +125,15 @@ async function prepare(stepDef, ctx, previousIterations, onToken) {
 function buildComfyWorkflow(stepDef, prepareResult, ctx) {
   const rs   = stepDef.referenceStrategy?.diffusion;
   const refs = ctx.references ?? [];
+  const mode = rs?.mode;
 
   let initImage = null;
   let denoise   = 0.6;
 
-  if (refs.length === 1 && rs?.one?.mode === 'init-image') {
+  if (refs.length > 0 && mode === 'init-image') {
     initImage = refs[0];
-    denoise   = rs.one.denoise ?? 0.6;
-  } else if (refs.length > 1 && rs?.many?.mode === 'init-image') {
-    initImage = refs[0]; // first ref only; adapter (many refs) is Phase 5
-    denoise   = rs.many.denoise ?? 0.6;
+    denoise   = rs.denoise ?? 0.6;
   }
-  // refs.length > 1 && rs?.many?.mode === 'adapter' → Phase 5, falls through to txt2img
 
   // Chain previous step's output as init-image when no reference override is active
   if (!initImage && ctx.chainedInputRef) {
@@ -144,9 +141,25 @@ function buildComfyWorkflow(stepDef, prepareResult, ctx) {
     denoise   = stepDef.params?.chainDenoise ?? 0.5;
   }
 
+  // Adapter mode: pass refs to the arch builder. adapterModel/clipVisionModel come from
+  // ctx.modelConfig (already spread by buildArchWorkflow), so only the images are explicit.
+  let adapterParams = {};
+  if (refs.length > 0 && mode === 'adapter') {
+    const arch = ctx.modelConfig?.architecture;
+    if (arch === 'sd15' || arch === 'sdxl') {
+      adapterParams = { ipAdapterImages: refs };
+    } else if (arch === 'flux') {
+      adapterParams = { reduxImages: refs };
+    } else if (arch === 'flux2') {
+      adapterParams = { referenceImages: refs }; // native ReferenceLatent, no adapter model needed
+    }
+    // Other archs: no adapter defined, falls through to txt2img
+  }
+
   const { workflow } = buildArchWorkflow(ctx.modelConfig, {
     ...prepareResult.params,
     ...(initImage ? { initImage, denoise } : {}),
+    ...adapterParams,
   });
   return workflow;
 }

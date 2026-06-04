@@ -62,8 +62,8 @@
       </select>
     </label>
 
-    <!-- T5 encoder (Chroma only) -->
-    <label v-if="showSplitField && hasField('clipName')">T5 text encoder file
+    <!-- Single text encoder: T5 for Chroma, Mistral 3 / Qwen 3 for Flux 2 -->
+    <label v-if="showSplitField && hasField('clipName')">Text encoder file
       <select v-model="form.clipName">
         <option value="">— select —</option>
         <option v-for="c in assets.comfyui?.clips" :key="c" :value="c">{{ c }}</option>
@@ -103,6 +103,31 @@
       </div>
     </div>
 
+    <!-- Reference adapter (IPAdapter for sd15/sdxl, Redux for flux/flux2) -->
+    <div v-if="adapterModelType">
+      <hr>
+      <strong>Reference adapter</strong>
+      <span class="hint"> — used when a workflow step is set to "adapter" mode for multiple references</span>
+      <label style="margin-top:8px">Adapter model
+        <select v-model="form.adapterModel">
+          <option value="">— none —</option>
+          <option v-for="m in adapterModelList" :key="m" :value="m">{{ m }}</option>
+        </select>
+        <span v-if="!adapterModelList.length" class="hint">
+          {{ adapterModelType === 'ipa' ? 'No IPAdapter models found (requires IPAdapter custom nodes).' : 'No Redux/style models found in ComfyUI.' }}
+        </span>
+      </label>
+      <label>CLIP Vision model
+        <select v-model="form.clipVisionModel">
+          <option value="">— none —</option>
+          <option v-for="m in assets.comfyui?.clipVisionModels ?? []" :key="m" :value="m">{{ m }}</option>
+        </select>
+      </label>
+      <label v-if="hasField('adapterWeight')">Adapter weight <span class="hint">(0–1, distributed across all refs)</span>
+        <input type="number" v-model.number="form.adapterWeight" min="0" max="1" step="0.05" placeholder="0.6">
+      </label>
+    </div>
+
     <div class="panel-actions">
       <button class="primary"               @click="save">Save model</button>
       <button class="secondary"             @click="$emit('cancel')">Cancel</button>
@@ -127,6 +152,7 @@ const form = reactive({
   label: '', architecture: '', splitLoad: false,
   checkpoint: '', unetName: '', clipL: '', t5xxl: '', clipName: '', vaeName: '',
   vae: '', useRefiner: false, refinerCheckpoint: '',
+  adapterModel: '', clipVisionModel: '', adapterWeight: '',
 });
 
 watch(() => props.model, m => {
@@ -143,16 +169,27 @@ watch(() => props.model, m => {
   form.vae               = m.vae               ?? '';
   form.useRefiner        = !!m.refinerCheckpoint;
   form.refinerCheckpoint = m.refinerCheckpoint ?? '';
+  form.adapterModel      = m.adapterModel      ?? '';
+  form.clipVisionModel   = m.clipVisionModel   ?? '';
+  form.adapterWeight     = m.adapterWeight     ?? '';
 }, { immediate: true });
 
-const arch          = computed(() => form.architecture);
-const loadingMode   = computed(() => props.archMeta[arch.value]?.loadingMode ?? '');
-const isForcedSplit = computed(() => loadingMode.value === 'split');
-const canToggleSplit= computed(() => loadingMode.value === 'split-or-checkpoint');
-const isSplit       = computed(() => isForcedSplit.value || (canToggleSplit.value && form.splitLoad));
-const showCheckpoint= computed(() => !isSplit.value && loadingMode.value !== '');
-const showSplitField= computed(() => isSplit.value);
-const archNotes     = computed(() => props.archMeta[arch.value]?.notes ?? null);
+const arch           = computed(() => form.architecture);
+const loadingMode    = computed(() => props.archMeta[arch.value]?.loadingMode ?? '');
+const isForcedSplit  = computed(() => loadingMode.value === 'split');
+const canToggleSplit = computed(() => loadingMode.value === 'split-or-checkpoint');
+const isSplit        = computed(() => isForcedSplit.value || (canToggleSplit.value && form.splitLoad));
+const showCheckpoint = computed(() => !isSplit.value && loadingMode.value !== '');
+const showSplitField = computed(() => isSplit.value);
+const archNotes      = computed(() => props.archMeta[arch.value]?.notes ?? null);
+
+// 'ipa' for sd15/sdxl, 'redux' for flux/flux2, falsy for others
+const adapterModelType = computed(() => props.archMeta[arch.value]?.fields?.adapterModel || null);
+const adapterModelList = computed(() => {
+  if (adapterModelType.value === 'ipa')   return props.assets?.comfyui?.ipAdapterModels ?? [];
+  if (adapterModelType.value === 'redux') return props.assets?.comfyui?.reduxModels ?? [];
+  return [];
+});
 
 function hasField(name) {
   return !!(props.archMeta[arch.value]?.fields?.[name]);
@@ -173,6 +210,9 @@ async function save() {
     clipName:          (isSplit.value  && form.clipName)    ? form.clipName    : null,
     vae:               form.vae              || null,
     refinerCheckpoint: (form.useRefiner && form.refinerCheckpoint) ? form.refinerCheckpoint : null,
+    adapterModel:      form.adapterModel    || null,
+    clipVisionModel:   form.clipVisionModel || null,
+    adapterWeight:     form.adapterWeight !== '' ? Number(form.adapterWeight) : null,
   };
 
   await saveModel(props.modelId, data);

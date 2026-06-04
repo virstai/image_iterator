@@ -44,10 +44,12 @@ async function chat(cfg, messages, options = {}) {
 }
 
 async function chatStream(cfg, messages, onToken, options = {}) {
+  const { signal, ...bodyOptions } = options;
   const res = await fetch(`${baseUrl(cfg)}/chat/completions`, {
     method:  'POST',
     headers: authHeaders(cfg),
-    body:    JSON.stringify({ model: cfg.llmModel, messages: toOpenAIMessages(messages), stream: true, ...options }),
+    body:    JSON.stringify({ model: cfg.llmModel, messages: toOpenAIMessages(messages), stream: true, ...bodyOptions }),
+    signal,
   });
   if (!res.ok) throw new Error(`LLM error ${res.status}: ${await res.text()}`);
 

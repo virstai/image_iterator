@@ -34,10 +34,14 @@ function waitForCompletion(promptId, clientId, onProgress, onPreview) {
     ws.on('message', (raw, isBinary) => {
       // Binary frame: 4-byte big-endian event type + image data (JPEG preview from ComfyUI)
       if (isBinary) {
-        if (onPreview && raw.length > 4 && raw.readUInt32BE(0) === 1) {
-          const img     = raw.slice(4);
-          const isJpeg  = img[0] === 0xFF && img[1] === 0xD8;
+        const frameType = raw.length > 4 ? raw.readUInt32BE(0) : -1;
+        if (onPreview && raw.length > 4 && frameType === 1) {
+          const img    = raw.slice(4);
+          const isJpeg = img[0] === 0xFF && img[1] === 0xD8;
+          console.log(`[comfyui] preview frame: ${img.length} bytes (${isJpeg ? 'jpeg' : 'png'})`);
           onPreview(`data:${isJpeg ? 'image/jpeg' : 'image/png'};base64,${img.toString('base64')}`);
+        } else {
+          console.log(`[comfyui] binary WS frame: ${raw.length} bytes, type=${frameType}`);
         }
         return;
       }
@@ -48,6 +52,13 @@ function waitForCompletion(promptId, clientId, onProgress, onPreview) {
         }
         if (msg.type === 'executing' && msg.data?.prompt_id === promptId && msg.data.node === null) {
           clearTimeout(timeout); ws.close(); resolve();
+        }
+        // ComfyUI sends this when a prompt is interrupted via POST /interrupt.
+        // Accept even when prompt_id is absent (older ComfyUI versions omit it).
+        if (msg.type === 'execution_interrupted' || msg.type === 'execution_error') {
+          if (!msg.data?.prompt_id || msg.data.prompt_id === promptId) {
+            clearTimeout(timeout); ws.close(); resolve();
+          }
         }
       } catch { /* ignore */ }
     });
@@ -85,23 +96,28 @@ async function fetchInputList(nodeType, inputName) {
 }
 
 async function getAssets() {
-  const [checkpoints, vaes, clips, unets, upscaleModels] = await Promise.allSettled([
+  const [checkpoints, vaes, clips, unets, upscaleModels, ipAdapterModels, clipVisionModels, reduxModels] = await Promise.allSettled([
     fetchInputList('CheckpointLoaderSimple', 'ckpt_name'),
     fetchInputList('VAELoader',              'vae_name'),
     fetchInputList('CLIPLoader',             'clip_name'),
     fetchInputList('UNETLoader',             'unet_name'),
     fetchInputList('UpscaleModelLoader',     'model_name'),
+    fetchInputList('IPAdapterModelLoader',   'model_name'),
+    fetchInputList('CLIPVisionLoader',       'clip_name'),
+    fetchInputList('StyleModelLoader',       'style_model_name'),
   ]);
 
+  const all = [checkpoints, vaes, clips, unets, upscaleModels, ipAdapterModels, clipVisionModels, reduxModels];
   return {
-    checkpoints:   checkpoints.status   === 'fulfilled' ? checkpoints.value   : [],
-    vaes:          vaes.status          === 'fulfilled' ? vaes.value          : [],
-    clips:         clips.status         === 'fulfilled' ? clips.value         : [],
-    unets:         unets.status         === 'fulfilled' ? unets.value         : [],
-    upscaleModels: upscaleModels.status === 'fulfilled' ? upscaleModels.value : [],
-    errors: [checkpoints, vaes, clips, unets, upscaleModels]
-      .filter(r => r.status === 'rejected')
-      .map(r => r.reason.message),
+    checkpoints:      checkpoints.status      === 'fulfilled' ? checkpoints.value      : [],
+    vaes:             vaes.status             === 'fulfilled' ? vaes.value             : [],
+    clips:            clips.status            === 'fulfilled' ? clips.value            : [],
+    unets:            unets.status            === 'fulfilled' ? unets.value            : [],
+    upscaleModels:    upscaleModels.status    === 'fulfilled' ? upscaleModels.value    : [],
+    ipAdapterModels:  ipAdapterModels.status  === 'fulfilled' ? ipAdapterModels.value  : [],
+    clipVisionModels: clipVisionModels.status === 'fulfilled' ? clipVisionModels.value : [],
+    reduxModels:      reduxModels.status      === 'fulfilled' ? reduxModels.value      : [],
+    errors: all.filter(r => r.status === 'rejected').map(r => r.reason.message),
   };
 }
 
@@ -116,4 +132,8 @@ async function uploadImage(buffer, filename) {
   return { filename: data.name, subfolder: data.subfolder ?? '', type: data.type ?? 'input' };
 }
 
-module.exports = { generate, getAssets, uploadImage };
+async function interrupt() {
+  try { await fetch(`${baseUrl()}/interrupt`, { method: 'POST' }); } catch { /* best effort */ }
+}
+
+module.exports = { generate, getAssets, uploadImage, interrupt };

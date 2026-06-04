@@ -53,9 +53,25 @@ function _buildGraph(nodes, p, seed, modelRef, clipRef, vaeRef) {
     latentRef = [emptyId, 0];
   }
 
-  const guidId  = nextId(); nodes[guidId]  = { class_type: "FluxGuidance",         inputs: { conditioning: [posId, 0], guidance: p.guidance } };
+  const guidId  = nextId(); nodes[guidId]  = { class_type: "FluxGuidance", inputs: { conditioning: [posId, 0], guidance: p.guidance } };
+
+  // Redux: chain StyleModelApply nodes to inject each reference into the conditioning.
+  // CLIPVisionLoader + StyleModelLoader are shared; one CLIPVisionEncode + StyleModelApply per ref.
+  let condRef = [guidId, 0];
+  if (p.reduxImages?.length && p.adapterModel && p.clipVisionModel) {
+    const cvId = nextId(); nodes[cvId] = { class_type: "CLIPVisionLoader",  inputs: { clip_name: p.clipVisionModel } };
+    const smId = nextId(); nodes[smId] = { class_type: "StyleModelLoader",  inputs: { style_model_name: p.adapterModel } };
+    for (const ref of p.reduxImages) {
+      const imgPath = ref.subfolder ? `${ref.subfolder}/${ref.filename}` : ref.filename;
+      const loadId  = nextId(); nodes[loadId]  = { class_type: "LoadImage",        inputs: { image: imgPath } };
+      const encId   = nextId(); nodes[encId]   = { class_type: "CLIPVisionEncode", inputs: { clip_vision: [cvId, 0], image: [loadId, 0], crop: "center" } };
+      const applyId = nextId(); nodes[applyId] = { class_type: "StyleModelApply",  inputs: { conditioning: condRef, style_model: [smId, 0], clip_vision_output: [encId, 0] } };
+      condRef = [applyId, 0];
+    }
+  }
+
   const noiseId = nextId(); nodes[noiseId] = { class_type: "RandomNoise",           inputs: { noise_seed: seed } };
-  const basicId = nextId(); nodes[basicId] = { class_type: "BasicGuider",           inputs: { model: modelRef, conditioning: [guidId, 0] } };
+  const basicId = nextId(); nodes[basicId] = { class_type: "BasicGuider",           inputs: { model: modelRef, conditioning: condRef } };
   const splitId = nextId(); nodes[splitId] = { class_type: "BasicScheduler",        inputs: { model: modelRef, scheduler: p.scheduler, steps: p.steps, denoise } };
   const samplId = nextId(); nodes[samplId] = { class_type: "KSamplerSelect",        inputs: { sampler_name: p.sampler } };
   const advId   = nextId(); nodes[advId]   = { class_type: "SamplerCustomAdvanced", inputs: { noise: [noiseId, 0], guider: [basicId, 0], sampler: [samplId, 0], sigmas: [splitId, 0], latent_image: latentRef } };

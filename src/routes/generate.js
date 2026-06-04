@@ -16,6 +16,7 @@ const { parseReview } = require('../lib/parsers');
 const sessions           = new Map(); // active sessions (in-memory cache)
 const pendingReviews     = new Map(); // `${sessionId}:${stepIndex}` → { resolve, reject }
 const pendingAcceptances = new Map(); // `${sessionId}:${stepIndex}` → { resolve, timer }
+const activeKills        = new Map(); // sessionId → kill function
 
 // Broadcast channel — all SSE clients subscribed to GET /events receive every event.
 const genEmitter = new EventEmitter();
@@ -44,7 +45,7 @@ function waitForAcceptanceGrace(key, seconds) {
 
 // ── Step execution ────────────────────────────────────────────────────────────────
 
-async function runStep(stepDef, stepIndex, session, ctx, cfg, res) {
+async function runStep(stepDef, stepIndex, session, ctx, cfg, res, isKilled = () => false) {
   const stepType = steps.get(stepDef.type);
   const stepData = session.steps[stepIndex];
   const tag      = session.id.slice(0, 8);
@@ -89,6 +90,7 @@ async function runStep(stepDef, stepIndex, session, ctx, cfg, res) {
     continueLoop = false;
 
     for (let i = 0; i < maxNewIter && !accepted; i++) {
+      if (isKilled()) throw new Error('Generation stopped by user');
       const iterNum = stepData.iterations.length + 1;
 
       // ── Phase 1: prepare ──────────────────────────────────────────
@@ -100,6 +102,8 @@ async function runStep(stepDef, stepIndex, session, ctx, cfg, res) {
         process.stdout.write(token);
       });
       process.stdout.write('\n');
+
+      if (isKilled()) throw new Error('Generation stopped by user');
 
       if (prepResult.prompt !== undefined) {
         const preview = prepResult.prompt;
@@ -122,6 +126,7 @@ async function runStep(stepDef, stepIndex, session, ctx, cfg, res) {
       );
       process.stdout.write('\n');
 
+      if (isKilled()) throw new Error('Generation stopped by user');
       if (!images.length) throw new Error('ComfyUI returned no images');
       const image    = images[0];
       const imageUrl = `/api/image?filename=${encodeURIComponent(image.filename)}&subfolder=${encodeURIComponent(image.subfolder ?? '')}&type=${encodeURIComponent(image.type ?? 'output')}`;
@@ -142,9 +147,10 @@ async function runStep(stepDef, stepIndex, session, ctx, cfg, res) {
       const reviewRaw  = await llm.chatStream(cfg, reviewMsgs, token => {
         emit(res, 'token', { step: stepIndex, iteration: iterNum, phase: 'review', token });
         process.stdout.write(token);
-      });
+      }, { signal: ctx.signal });
       process.stdout.write('\n');
 
+      if (isKilled()) throw new Error('Generation stopped by user');
       const { verdict, diagnosis } = parseReview(reviewRaw);
       console.log(`[${tag}] step ${stepIndex} iter ${iterNum}: verdict=${verdict} — ${diagnosis}`);
       emit(res, 'review', { step: stepIndex, iteration: iterNum, verdict, diagnosis });
@@ -207,7 +213,22 @@ async function runStep(stepDef, stepIndex, session, ctx, cfg, res) {
 
 async function runPipeline(session, pipelineDef, cfg, res) {
   const tag = session.id.slice(0, 8);
-  const ctx = { userPrompt: session.prompt, references: session.references ?? [], cfg };
+  const abortController = new AbortController();
+  const ctx = { userPrompt: session.prompt, references: session.references ?? [], cfg, signal: abortController.signal };
+
+  let killed = false;
+
+  activeKills.set(session.id, async () => {
+    killed = true;
+    abortController.abort();
+    await comfyui.interrupt();
+    for (const [key, p] of pendingReviews) {
+      if (key.startsWith(`${session.id}:`)) { pendingReviews.delete(key); p.reject(new Error('Stopped')); }
+    }
+    for (const [key, p] of pendingAcceptances) {
+      if (key.startsWith(`${session.id}:`)) { clearTimeout(p.timer); pendingAcceptances.delete(key); p.resolve(false); }
+    }
+  });
 
   res.on('close', () => {
     for (const [key, p] of pendingReviews) {
@@ -218,11 +239,13 @@ async function runPipeline(session, pipelineDef, cfg, res) {
     }
   });
 
+  let currentStep = 0;
   try {
     let overallAccepted = false;
 
     for (let si = 0; si < pipelineDef.length; si++) {
-      const { accepted, outputImageUrl } = await runStep(pipelineDef[si], si, session, { ...ctx }, cfg, res);
+      currentStep = si;
+      const { accepted, outputImageUrl } = await runStep(pipelineDef[si], si, session, { ...ctx }, cfg, res, () => killed);
       overallAccepted = accepted;
       if (outputImageUrl) {
         ctx.inputImage = outputImageUrl;
@@ -243,10 +266,22 @@ async function runPipeline(session, pipelineDef, cfg, res) {
       iterations: session.steps.reduce((sum, st) => sum + st.iterations.length, 0),
     });
   } catch (err) {
-    session.status = 'error';
-    console.error(`[${tag}] error: ${err.message}`);
-    emit(res, 'error', { message: err.message });
+    if (killed) {
+      // Clear partial data from the interrupted step so session reflects only finished work
+      if (session.steps[currentStep]) {
+        session.steps[currentStep].iterations    = [];
+        session.steps[currentStep].outputImageUrl = null;
+      }
+      session.status = 'stopped';
+      console.log(`[${tag}] stopped by user at step ${currentStep}`);
+      emit(res, 'stopped', { step: currentStep });
+    } else {
+      session.status = 'error';
+      console.error(`[${tag}] error: ${err.message}`);
+      emit(res, 'error', { message: err.message });
+    }
   } finally {
+    activeKills.delete(session.id);
     db.saveSession(session);
     res.end();
     // Refresh skill for this workflow using the first generate step's model arch
@@ -485,6 +520,14 @@ router.post('/sessions/:id/refuse-accepted', (req, res) => {
 });
 
 // GET /api/generate/events — broadcast SSE stream
+router.post('/kill', async (req, res) => {
+  const { sessionId } = req.body;
+  const kill = activeKills.get(sessionId);
+  if (!kill) return res.status(404).json({ error: 'No active generation for this session' });
+  await kill();
+  res.json({ ok: true });
+});
+
 router.get('/events', (req, res) => {
   res.set({ 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', 'Connection': 'keep-alive' });
   res.flushHeaders();

@@ -195,6 +195,13 @@ export function handleEvent(event, data) {
       genState.loadedDesc = data.accepted ? null : (data.prompt || '');
       break;
 
+    case 'stopped':
+      genState.steps.splice(data.step ?? genState.steps.length - 1);
+      genState.status    = 'Stopped';
+      genState.iterBadge = '';
+      genState.running   = false;
+      break;
+
     case 'error':
       genState.status    = `Error: ${data.message}`;
       genState.iterBadge = '';
@@ -208,14 +215,17 @@ export function readSSEStream(response, onDone) {
   const decoder = new TextDecoder();
   let buffer    = '';
 
-  function processBuffer() {
+  async function processBuffer() {
     const blocks = buffer.split('\n\n');
     buffer = blocks.pop();
     for (const block of blocks) {
       const eMatch = block.match(/^event: (.+)$/m);
       const dMatch = block.match(/^data: (.+)$/m);
       if (!eMatch || !dMatch) continue;
-      try { handleEvent(eMatch[1].trim(), JSON.parse(dMatch[1])); } catch { /* ignore */ }
+      const event = eMatch[1].trim();
+      try { handleEvent(event, JSON.parse(dMatch[1])); } catch { /* ignore */ }
+      // Yield after preview events so Vue can flush + browser can paint before next event
+      if (event === 'preview') await new Promise(r => requestAnimationFrame(r));
     }
   }
 
@@ -225,7 +235,7 @@ export function readSSEStream(response, onDone) {
         const { done, value } = await reader.read();
         if (done) break;
         buffer += decoder.decode(value, { stream: true });
-        processBuffer();
+        await processBuffer();
       }
     } finally {
       onDone?.();
@@ -316,6 +326,11 @@ export async function refuseAccepted(sessionId, stepIndex, iterationN) {
       it.status          = 'REFUSED';
     }
   }
+}
+
+export async function killGeneration() {
+  if (!genState.sessionId) return;
+  await api('POST', '/api/generate/kill', { sessionId: genState.sessionId });
 }
 
 export function clearSession() {

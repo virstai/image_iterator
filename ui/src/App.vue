@@ -59,6 +59,7 @@
       :status="genState.status"
       :iter-badge="genState.iterBadge"
       :session-id="genState.sessionId"
+      :running="genState.running"
     />
   </div>
 </template>

@@ -14,22 +14,22 @@ const ARCH_META = {
   sd15: {
     label:       'SD 1.5 / SD 2.x',
     loadingMode: 'checkpoint',
-    fields:      { checkpoint: true, vae: true, cfgScale: true, negativePrompt: true },
+    fields:      { checkpoint: true, vae: true, cfgScale: true, negativePrompt: true, adapterModel: 'ipa', clipVisionModel: true, adapterWeight: true },
   },
   sdxl: {
     label:       'SDXL',
     loadingMode: 'checkpoint',
-    fields:      { checkpoint: true, vae: true, cfgScale: true, negativePrompt: true, refiner: true },
+    fields:      { checkpoint: true, vae: true, cfgScale: true, negativePrompt: true, refiner: true, adapterModel: 'ipa', clipVisionModel: true, adapterWeight: true },
   },
   flux: {
     label:       'Flux.1',
     loadingMode: 'split-or-checkpoint',
-    fields:      { checkpoint: true, unetName: true, clipL: true, t5xxl: true, vaeName: true, guidance: true },
+    fields:      { checkpoint: true, unetName: true, clipL: true, t5xxl: true, vaeName: true, guidance: true, adapterModel: 'redux', clipVisionModel: true },
   },
   flux2: {
-    label:       'Flux 2',
-    loadingMode: 'split-or-checkpoint',
-    fields:      { checkpoint: true, unetName: true, clipL: true, t5xxl: true, vaeName: true, guidance: true },
+    label:       'Flux 2 (Dev / Klein)',
+    loadingMode: 'split',
+    fields:      { unetName: true, clipName: true, vaeName: true, guidance: true },
   },
   sd3: {
     label:       'SD 3 / SD 3.5',
