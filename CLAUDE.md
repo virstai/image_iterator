@@ -23,9 +23,9 @@ API on :3000, Vite dev on :5173. **Always stop the dev server on port 3000 after
 
 ## Branch: `refactor/comfyrefinery`
 
-This is an active refactor branch. **Do not merge to main until all phases are complete.**
+All planned phases complete. Ready to merge to main.
 
-### Phase status
+### Phase history
 
 | Phase | Status | Commit |
 |-------|--------|--------|
@@ -33,8 +33,8 @@ This is an active refactor branch. **Do not merge to main until all phases are c
 | 2 — Workflow entity | ✅ Done | `538f3a8` |
 | LLM refactor — OpenAI-compat provider | ✅ Done | `d77467d` |
 | 3 — Reference handling | ✅ Done | `d91b763` |
-| 4 — Upscale step | ✅ Done | see below |
-| 5 — Reference adapters | ⏳ Next | see spec below |
+| 4 — Upscale step | ✅ Done | `69d0685` |
+| 5 — Reference adapters + stop/kill fixes | ✅ Done | `be8c9d0` |
 | 6 — Video step | Deferred | — |
 
 ---
@@ -48,8 +48,11 @@ This is an active refactor branch. **Do not merge to main until all phases are c
 {
   "id": "sdxl-base", "label": "SDXL Base", "architecture": "sdxl",
   "checkpoint": "sdXL_v10.safetensors", "vae": "sdxl_vae.safetensors"
-  // split-load archs also: unetName, clipL, t5xxl, clipName, vaeName
+  // split-load archs (flux, flux2): unetName, clipL, t5xxl, clipName, vaeName
   // sdxl: useRefiner, refinerCheckpoint
+  // sd15/sdxl with adapter: adapterModel, clipVisionModel, adapterWeight
+  // flux with adapter: adapterModel (redux model), clipVisionModel
+  // flux2: no adapter fields (native ReferenceLatent, no external model needed)
 }
 ```
 
@@ -66,11 +69,7 @@ reference strategy, ordered steps, per-step review. **Active-selected entity.**
                   "refinerSwitchAt": 0.8 },
       "referenceStrategy": {
         "visionNotes": true,
-        "diffusion": {
-          "none": "txt2img",
-          "one":  { "mode": "init-image", "denoise": 0.6 },
-          "many": { "mode": "init-image", "denoise": 0.6 }
-        }
+        "diffusion": { "mode": "init-image", "denoise": 0.6 }
       },
       "review": { "maxIterations": 4, "humanReview": false, "gracePeriod": 10 }
     },
@@ -83,15 +82,16 @@ reference strategy, ordered steps, per-step review. **Active-selected entity.**
 }
 ```
 
-`referenceStrategy.diffusion` keys:
-- `none` — always `"txt2img"` (no refs)
-- `one` — `{ mode: "txt2img" | "init-image", denoise }` — when exactly 1 ref
-- `many` — `{ mode: "txt2img" | "init-image" | "adapter", denoise }` — when >1 refs
-  - `"init-image"` uses refs[0] only; `"adapter"` is Phase 5 (falls through to txt2img)
+`referenceStrategy.diffusion` — `{ mode, denoise? }`:
+- `mode: "txt2img"` — ignore refs for diffusion (still used for vision notes)
+- `mode: "init-image"` — refs[0] as init image at `denoise`
+- `mode: "adapter"` — IPAdapter (sd15/sdxl), Redux (flux), or native ReferenceLatent (flux2)
+
+Back-compat: old `{ none, one, many }` format is read transparently.
 
 Skill + notes live in `data/skills/<workflowId>.json`, keyed by workflow ID.
 
-### Session data model (current)
+### Session data model
 ```jsonc
 {
   "id": "...", "prompt": "...",
@@ -105,57 +105,77 @@ Skill + notes live in `data/skills/<workflowId>.json`, keyed by workflow ID.
       "iterations": [ { "imageUrl": "...", "verdict": "ACCEPT", "diagnosis": "..." } ],
       "outputImageUrl": "/api/image?..." }
   ],
-  "status": "complete", "createdAt": "..."
+  "status": "complete" | "stopped" | "error", "createdAt": "..."
 }
 ```
 
-### SSE events (current)
-All events carry `step` (0-indexed). Key events:
-- `step` — `{ index, type, label, total }` — start of each step
-- `phase`, `token`, `prompt`, `progress`, `preview`, `image`, `review`, `human_review`,
-  `human_verdict`, `accepted_pending`, `acceptance_refused`, `step_complete`, `done`, `error`
+### SSE events
+All events carry `step` (0-indexed). Full event list:
 
-New in Phase 4:
-- `preview` — `{ step, iteration, url }` — base64 data URL from ComfyUI WS binary frame during generation
-- `step_complete` — `{ step, imageUrl, accepted }` — emitted after each step finishes; pipeline stops early if `!accepted` and more steps remain
-- `accepted_pending` now includes `humanReview: bool` — client only auto-opens modal when true
+| Event | Payload | Notes |
+|---|---|---|
+| `session` | `{ id, prompt, resume? }` | First event; client sets sessionId |
+| `step` | `{ index, type, label, total }` | Start of each pipeline step |
+| `phase` | `{ step, phase, iteration }` | `prompt_building`, `generating`, `reviewing` |
+| `token` | `{ step, iteration, phase, token }` | LLM streaming token |
+| `prompt` | `{ step, iteration, prompt }` | Final built prompt |
+| `progress` | `{ step, iteration, pct }` | ComfyUI sampling progress 0–100 |
+| `preview` | `{ step, iteration, url }` | Base64 data URL from ComfyUI WS binary frame |
+| `image` | `{ step, iteration, url }` | Final image URL after generation |
+| `review` | `{ step, iteration, verdict, diagnosis }` | AI review result |
+| `human_review` | `{ step, iteration, aiVerdict, aiDiagnosis }` | Awaiting human decision |
+| `human_verdict` | `{ step, iteration, accepted, feedback }` | Human decision received |
+| `accepted_pending` | `{ step, iteration, gracePeriod, humanReview, maxIterations? }` | Grace period started |
+| `acceptance_refused` | `{ step, iteration }` | User refused during grace period |
+| `step_complete` | `{ step, imageUrl, accepted }` | Step finished; pipeline stops if `!accepted` |
+| `done` | `{ accepted, imageUrl, sessionId, prompt, iterations }` | Pipeline complete |
+| `stopped` | `{ step }` | User clicked Stop; in-progress step cleared |
+| `error` | `{ message }` | Unexpected pipeline error |
+| `history` | `{ step, ...iteration }` | Replayed on `/continue` |
 
 `pendingReviews` / `pendingAcceptances` keyed by `"${sessionId}:${stepIndex}"`.
 
-### LLM abstraction (current)
+### LLM abstraction
 All LLM calls through `src/services/llm.js`:
-- `llm.chatStream(cfg, messages, onToken)` — streaming
+- `llm.chatStream(cfg, messages, onToken, options?)` — streaming; `options.signal` aborts the fetch
 - `llm.chat(cfg, messages)` — non-streaming (skill refresh)
 - `llm.listModels(cfg)` → `string[]` — enumerate model IDs
 
 Single provider `'openai'` in `src/services/providers/openai.js` — speaks the
-OpenAI `/v1/chat/completions` API. Works with Ollama (`llmBaseUrl` pointing to its
-`/v1` endpoint), real OpenAI, LM Studio, vLLM, etc.
+OpenAI `/v1/chat/completions` API. Works with Ollama, real OpenAI, LM Studio, vLLM, etc.
 
-Messages with `images: [base64, ...]` are converted to OpenAI content-array format
-(each image becomes `{ type: "image_url", image_url: { url: "data:image/png;base64,..." } }`).
+Messages with `images: [base64, ...]` are converted to OpenAI content-array format.
+Back-compat: existing configs with `ollamaUrl` are migrated automatically.
 
-Back-compat: existing configs with `ollamaUrl` are migrated automatically — `/v1` is
-appended to derive `llmBaseUrl`.
-
-### Step registry (current)
+### Step registry
 `src/steps/index.js` — `get(type)` → step module.
-`src/steps/generate.js` — generate step: LLM prompt build, vision notes, img2img routing, review.
+`src/steps/generate.js` — generate step: LLM prompt build, vision notes, adapter/img2img routing, review.
 `src/steps/upscale.js` — upscale step: model upscaler (ESRGAN) or hires fix (re-diffusion).
 
 Step interface:
 ```js
 label(stepDef, cfg)
-prepare(stepDef, ctx, previousIterations, onToken)     // → { prompt?, params?, inputRef?, ... }
+prepare(stepDef, ctx, previousIterations, onToken)     // → { prompt?, params?, ... }
 buildComfyWorkflow(stepDef, prepareResult, ctx)        // → ComfyUI node graph
 reviewMessages(stepDef, prepareResult, ctx, imageBase64, previousIterations)
 ```
 
-`ctx` shape: `{ userPrompt, modelConfig, skillId, inputImage, chainedInputRef, references, cfg }`.
-- `skillId` = `session.workflowId` (set in `runStep`)
+`ctx` shape: `{ userPrompt, modelConfig, skillId, inputImage, chainedInputRef, references, cfg, signal }`.
+- `skillId` = `session.workflowId`
 - `inputImage` = previous step's output URL (step chaining)
-- `chainedInputRef` = re-uploaded ComfyUI input ref of `inputImage`, set by `runStep` for generate steps that aren't first in the pipeline; used as init-image at denoise 0.5 (`stepDef.params.chainDenoise` to override)
+- `chainedInputRef` = re-uploaded ComfyUI input ref of `inputImage`; used as init-image at denoise 0.5 (`stepDef.params.chainDenoise` to override)
 - `references` = `[{ filename, subfolder, type }]` (user-uploaded refs)
+- `signal` = `AbortSignal` from pipeline's `AbortController`; passed to all `chatStream` calls
+
+### Reference adapter routing (`buildComfyWorkflow`)
+When `refs.length > 0 && mode === 'adapter'`:
+
+| Architecture | Approach | Params passed to builder |
+|---|---|---|
+| `sd15` / `sdxl` | IPAdapter | `ipAdapterImages: refs` (+ `adapterModel`, `clipVisionModel` from modelConfig) |
+| `flux` | Redux (StyleModelApply) | `reduxImages: refs` (+ `adapterModel` from modelConfig) |
+| `flux2` | Native ReferenceLatent | `referenceImages: refs` (no adapter model needed) |
+| Others | Falls through to txt2img | — |
 
 ### Upscale step shapes
 ```jsonc
@@ -171,11 +191,30 @@ reviewMessages(stepDef, prepareResult, ctx, imageBase64, previousIterations)
   "review": { "maxIterations": 1, "humanReview": true } }
 ```
 `model` type: `UpscaleModelLoader → ImageUpscaleWithModel → (ImageScaleBy if factor < native) → SaveImage`.
-`hires` type: calls arch workflow builder with `initImage`, then injects `LatentUpscaleBy` between VAEEncode and KSampler.
+`hires` type: calls arch workflow builder with `initImage`, injects `LatentUpscaleBy` between VAEEncode and KSampler.
+
+### Flux 2 architecture (`flux2.js`)
+Always split-load: `UNETLoader` + `CLIPLoader(type:"flux2")` + `VAELoader`.
+- `clipName` field for text encoder (Mistral 3 for Dev, Qwen 3 for Klein)
+- Sampler: `KSampler`; empty latent: `EmptyFlux2LatentImage`; negative: `ConditioningZeroOut`
+- `archMeta.loadingMode: 'split'` (forced, no checkpoint toggle)
+- Reference chain: `LoadImage → ImageScaleToTotalPixels(1MP, 64step) → VAEEncode → ReferenceLatent`
+- `ReferenceLatent` inputs: `{ conditioning, latent }` — no `vae` or `image` inputs
 
 ### ComfyUI asset discovery
-`comfyui.fetchInputList(nodeType, inputName)` — handles both old (`[array, {}]`) and new (`["COMBO", { options: [...] }]`) ComfyUI `object_info` formats.
-`comfyui.getAssets()` → `{ checkpoints, vaes, clips, unets, upscaleModels, errors }`.
+`comfyui.fetchInputList(nodeType, inputName)` — handles both old and new `object_info` formats.
+`comfyui.getAssets()` → `{ checkpoints, vaes, clips, unets, upscaleModels, ipAdapterModels, clipVisionModels, reduxModels, errors }`.
+
+### Kill / stop mechanism
+`runPipeline` creates an `AbortController` and puts `signal` on `ctx`. The kill function in `activeKills`:
+1. Sets `killed = true`
+2. Calls `abortController.abort()` — immediately cancels any in-flight LLM `fetch()`
+3. Calls `comfyui.interrupt()` — cancels current ComfyUI generation
+4. Resolves any pending reviews/acceptances
+
+`isKilled()` is checked at: iteration start, after `prepare()` returns, after `comfyui.generate()` returns, and after the review `chatStream` returns. On kill, the pipeline emits `stopped { step }` (not `error`), clears the in-progress step's iterations from the session, and sets `session.status = 'stopped'`.
+
+`comfyui.waitForCompletion` handles `execution_interrupted` — the `prompt_id` check is lenient (accepts messages without `prompt_id` for older ComfyUI compatibility).
 
 ### Skill / notes system
 `data/skills/<workflowId>.json` — per-workflow knowledge base.
@@ -188,21 +227,23 @@ Notes have `auto: bool` and `enabled: bool`:
 `skillRefresher.js` runs after each session and on manual refresh:
 - Updates the SKILL text freely.
 - Adds/replaces disabled auto notes from ENFORCE / BLACKLIST sections.
-- Locked (enabled) notes are always preserved verbatim; AI is told not to re-suggest them.
+- Locked (enabled) notes are always preserved verbatim.
 - New suggestions always start `enabled: false`.
 
-### Orchestration (current)
+### Orchestration
 `runPipeline(session, pipelineDef, cfg, res)` — iterates steps, threads `ctx.inputImage`.
+- Creates `AbortController`; kill fn aborts it + interrupts ComfyUI.
 - Emits `step_complete` after each step.
 - Stops early (skips remaining steps) if a step finishes without acceptance.
+- On kill: emits `stopped`; on unexpected error: emits `error`.
 
-`runStep(stepDef, stepIndex, session, ctx, cfg, res)` — per-step loop:
+`runStep(stepDef, stepIndex, session, ctx, cfg, res, isKilled)` — per-step loop:
 - Per-step review settings (`stepDef.review`) override global `cfg.*`.
-- For generate steps with a previous step output: pre-uploads `ctx.inputImage` and adds `chainedInputRef` to ctx.
+- For generate steps with a previous step output: pre-uploads `ctx.inputImage` as `chainedInputRef`.
 - Forwards ComfyUI binary WebSocket preview frames as `preview` SSE events.
-- `accepted_pending` event includes `humanReview` so client only opens the modal when relevant.
+- `isKilled()` checked at multiple points; all LLM calls receive `ctx.signal`.
 
-### Config shape (current)
+### Config shape
 ```jsonc
 {
   "llmBaseUrl":            "http://127.0.0.1:11434/v1",
@@ -216,7 +257,12 @@ Notes have `auto: bool` and `enabled: bool`:
   "acceptanceGracePeriod": 10,
   "models": {
     "sdxl-base": { "id": "sdxl-base", "label": "SDXL Base", "architecture": "sdxl",
-                   "checkpoint": "sdXL_v10.safetensors", "vae": "sdxl_vae.safetensors" }
+                   "checkpoint": "sdXL_v10.safetensors", "vae": "sdxl_vae.safetensors" },
+    "flux-dev":  { "id": "flux-dev", "label": "Flux Dev", "architecture": "flux",
+                   "unetName": "flux1-dev.safetensors", "clipL": "clip_l.safetensors",
+                   "t5xxl": "t5xxl_fp8.safetensors", "vaeName": "ae.safetensors",
+                   "adapterModel": "ip-adapter_flux1_dev.safetensors",
+                   "clipVisionModel": "sigclip_vision_patch14_384.safetensors" }
   },
   "workflows": {
     "portrait-4x": { "id": "portrait-4x", "label": "Portrait → 4x", "steps": [ ... ] }
@@ -231,7 +277,7 @@ Notes have `auto: bool` and `enabled: bool`:
 ```
 src/
   routes/
-    generate.js       — runPipeline + runStep, SSE, session CRUD
+    generate.js       — runPipeline + runStep, SSE, session CRUD, kill route
     references.js     — POST /api/references/upload (base64 JSON → ComfyUI)
     sessions.js       — config/models/workflows/skills/assets API
     sdapi.js          — A1111 compat shim (calls /api/generate/run internally)
@@ -243,34 +289,37 @@ src/
     llm.js            — provider router
     comfyui.js        — ComfyUI HTTP + WebSocket client; preview frame handling
     providers/
-      openai.js       — OpenAI-compat LLM driver (Ollama /v1, OpenAI, LM Studio…)
+      openai.js       — OpenAI-compat LLM driver; supports AbortSignal via options.signal
   steps/
     index.js          — step-type registry (generate, upscale)
-    generate.js       — generate step: vision notes, img2img routing, chain input, review
+    generate.js       — generate step: vision notes, adapter/img2img routing, chain input, review
     upscale.js        — upscale step: model (ESRGAN) + hires (re-diffusion) types
   workflows/
     index.js          — buildWorkflow(modelConfig, params) + getDefaults(arch) + archMeta
-    sd15.js / sdxl.js / flux.js / flux2.js / sd3.js / chroma.js / anima.js
-                      — all support params.initImage + params.denoise for img2img
+    sd15.js           — SD1.5; supports initImage, ipAdapterImages
+    sdxl.js           — SDXL + refiner; supports initImage, ipAdapterImages
+    flux.js           — Flux 1 (SamplerCustomAdvanced); supports initImage, reduxImages
+    flux2.js          — Flux 2 (KSampler, split-load only); supports referenceImages
+    sd3.js / chroma.js / anima.js
   lib/
     parsers.js        — parsePromptResponse, parseReview
 ui/src/
   stores/
     config.js         — configState, loadConfig, saveConfig, model/workflow CRUD
-    generate.js       — genState (loadedRefs), handleEvent, SSE stream helpers
+    generate.js       — genState, handleEvent (incl. stopped), SSE stream helpers, killGeneration
   components/
     AppHeader.vue       — WorkflowSelect + panel buttons
     WorkflowSelect.vue  — custom dropdown for active workflow
     GenerateSection.vue — prompt input + reference drop zone; restores refs on session load
     RefGrid.vue         — presentational reference image grid + drop zone shell
     RefImage.vue        — single reference image tile (thumbnail + remove button)
-    RunSection.vue      — step group renderer; type-badged headers; preview during generation
+    RunSection.vue      — step group renderer; type-badged headers; Stop button
     IterationCard.vue   — single iteration thumbnail; live preview via data URL
     IterationModal.vue  — full detail + human review + refuse
     ModelsPanel.vue     — model building-blocks list
     ModelEditor.vue     — loader fields, data-driven from archMeta.fields
     WorkflowsPanel.vue  — workflow list + active selector
-    WorkflowEditor.vue  — step builder: generate + upscale (model/hires) types
+    WorkflowEditor.vue  — step builder: generate (with adapter picker) + upscale (model/hires)
     SettingsPanel.vue   — global settings (llmBaseUrl, llmApiKey, comfyuiUrl, llmModel)
     HistoryPanel.vue    — past sessions list
 data/
@@ -299,46 +348,7 @@ Integration tests write to a tmpDir; set `DATA_DIR` / `SESSIONS_DIR` / `SKILLS_D
 
 ---
 
-## Phase 5 — Reference adapters
+## Known limitations
 
-**Goal:** When `referenceStrategy.diffusion.many.mode === 'adapter'`, use IPAdapter
-(SD1.5 / SDXL) or Redux / Kontext (Flux) to condition generation on multiple reference images simultaneously, rather than using only refs[0] as an init-image.
-
-### What to build
-
-**`src/workflows/sd15.js` + `sdxl.js`** — add IPAdapter branch:
-```js
-// When params.ipAdapterImages is set (array of { filename, subfolder, type } refs):
-// LoadImage × N → IPAdapter (model + clip_vision) → model pipe
-```
-Requires `IPAdapterModelLoader` and `CLIPVisionLoader` nodes (standard IPAdapter custom nodes).
-
-**`src/workflows/flux.js` + `flux2.js`** — add Redux / Kontext branch:
-```js
-// Redux: ReduxImageEncoder × N → FluxGuidance conditioning
-// Kontext: KontextImageEncoder feeds into the Flux sampler
-```
-
-**`src/steps/generate.js`** — `buildComfyWorkflow`:
-- When `refs.length > 1 && rs?.many?.mode === 'adapter'`, pass `refs` as `ipAdapterImages` (or redux/kontext images) to the arch workflow builder.
-- Architecture-specific: sd15/sdxl use IPAdapter, flux/flux2 use Redux or Kontext.
-
-**`src/services/comfyui.js`** — extend `getAssets()`:
-- `ipAdapterModels` via `fetchInputList('IPAdapterModelLoader', 'model_name')`
-- `clipVisionModels` via `fetchInputList('CLIPVisionLoader', 'model_name')`
-
-**`src/routes/sessions.js`** — expose `ipAdapterModels` + `clipVisionModels` via `/api/sessions/assets`.
-
-**`ui/src/components/WorkflowEditor.vue`** — in the generate step's reference strategy section:
-- Enable the `adapter` option in the "When many references" select.
-- When `adapter` is selected, show model pickers for IPAdapter model + CLIP vision model (for sd15/sdxl), or note that Flux uses Redux/Kontext automatically.
-
-### Architecture routing
-
-| Architecture | Adapter approach | Key nodes |
-|---|---|---|
-| `sd15` / `sdxl` | IPAdapter | `IPAdapterModelLoader`, `CLIPVisionLoader`, `IPAdapter` |
-| `flux` / `flux2` | Redux or Kontext | `ReduxImageEncoder` / `KontextImageEncoder` |
-| Others | Falls through to txt2img | — |
-
-The `many.mode === 'adapter'` branch in `buildComfyWorkflow` currently falls through to txt2img (Phase 5 stub). Phase 5 replaces that fallthrough with real adapter conditioning.
+- **Preview images**: ComfyUI's `latent2rgb` preview method does not emit binary WS frames for Flux/Flux 2 (16-channel latent space). Use `--preview-method taesd` with a Flux-compatible TAESD model for previews on those architectures. SD1.5/SDXL previews work with `latent2rgb`.
+- **Video step (Phase 6)**: Deferred — no spec yet.
