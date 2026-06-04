@@ -1,75 +1,102 @@
 <template>
-  <aside class="panel">
-    <div class="panel-header">
-      <h2>Models</h2>
-      <button class="close-btn" @click="$emit('close')">&#x2715;</button>
+  <div class="two-pane">
+    <!-- Left: model list -->
+    <div class="two-pane-list">
+      <div class="two-pane-header">
+        <span class="two-pane-header-title">Models</span>
+        <button class="primary small" @click="startNew">+ New</button>
+      </div>
+      <div class="two-pane-list-body">
+        <div
+          v-for="(m, id) in config.models"
+          :key="id"
+          class="list-row"
+          :class="{ selected: selectedId === id }"
+          @click="select(id)"
+        >
+          <div class="list-row-name">{{ m.label || id }}</div>
+          <div class="list-row-meta">{{ archMeta[m.architecture]?.label || m.architecture || '—' }}</div>
+        </div>
+        <div v-if="!Object.keys(config.models ?? {}).length" style="font-size:12px;color:var(--muted);padding:8px 4px">
+          No models yet.
+        </div>
+      </div>
     </div>
 
-    <div v-if="!editingId && !isAdding" id="model-list-section">
-      <ul id="model-list">
-        <li v-if="!Object.keys(config.models ?? {}).length" style="color:var(--muted);font-size:13px;padding:8px 0">
-          No models configured yet.
-        </li>
-        <li v-for="(m, id) in config.models" :key="id">
-          <div class="model-info">
-            <span class="model-label">{{ m.label || id }}</span>
-            <span class="model-arch">{{ archMeta[m.architecture]?.label || m.architecture || '—' }}</span>
-          </div>
-          <div class="model-actions">
-            <button class="small secondary" @click="openEditor(id)">Edit</button>
-          </div>
-        </li>
-      </ul>
-      <button class="primary" @click="openEditor(null)">+ Add model</button>
+    <!-- Right: editor -->
+    <div class="two-pane-detail">
+      <template v-if="selectedId !== null">
+        <div class="editor-header">
+          <span class="editor-header-name">{{ isAdding ? 'New model' : (config.models[selectedId]?.label || selectedId) }}</span>
+          <button v-if="!isAdding" class="danger small" @click="del" :disabled="saving">Delete</button>
+        </div>
+        <div class="two-pane-detail-body">
+          <ModelEditor
+            :key="selectedId"
+            :model-id="isAdding ? null : selectedId"
+            :model="isAdding ? null : config.models[selectedId]"
+            :arch-meta="archMeta"
+            :assets="assets"
+            @saved="onSaved"
+            @deleted="onDeleted"
+          />
+        </div>
+      </template>
+      <div v-else class="two-pane-placeholder">Select a model to edit</div>
     </div>
-
-    <ModelEditor
-      v-else
-      :model-id="editingId"
-      :model="editingId ? config.models[editingId] : null"
-      :arch-meta="archMeta"
-      :assets="assets"
-      @saved="onSaved"
-      @deleted="onDeleted"
-      @cancel="closeEditor"
-    />
-  </aside>
+  </div>
 </template>
 
 <script setup>
 import { ref, onMounted } from 'vue';
 import ModelEditor from './ModelEditor.vue';
-import { saveModel, deleteModel, loadAssets } from '../stores/config.js';
+import { deleteModel, loadAssets } from '../stores/config.js';
 
 const props = defineProps({
   config:   { type: Object, default: () => ({}) },
   assets:   { type: Object, default: () => ({}) },
   archMeta: { type: Object, default: () => ({}) },
 });
-const emit = defineEmits(['changed', 'close']);
+const emit = defineEmits(['changed']);
 
-const editingId = ref(null);
-const isAdding  = ref(false);
+const selectedId = ref(null);
+const isAdding   = ref(false);
+const saving     = ref(false);
 
 onMounted(() => { loadAssets().catch(() => {}); });
 
-function openEditor(id) {
-  editingId.value = id;
-  isAdding.value  = !id;
+function select(id) {
+  selectedId.value = id;
+  isAdding.value   = false;
 }
 
-function closeEditor() {
-  editingId.value = null;
-  isAdding.value  = false;
+function startNew() {
+  selectedId.value = '__new__';
+  isAdding.value   = true;
+}
+
+async function del() {
+  if (!selectedId.value || isAdding.value) return;
+  if (!confirm(`Delete "${props.config.models[selectedId.value]?.label || selectedId.value}"?`)) return;
+  saving.value = true;
+  try {
+    await deleteModel(selectedId.value);
+    selectedId.value = null;
+    emit('changed');
+  } finally {
+    saving.value = false;
+  }
 }
 
 async function onSaved() {
-  closeEditor();
+  selectedId.value = null;
+  isAdding.value   = false;
   emit('changed');
 }
 
 async function onDeleted() {
-  closeEditor();
+  selectedId.value = null;
+  isAdding.value   = false;
   emit('changed');
 }
 </script>
