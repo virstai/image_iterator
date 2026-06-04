@@ -329,6 +329,10 @@ export async function loadSession(sessionId) {
   const totalIter = (session.steps ?? []).reduce((sum, st) => sum + st.iterations.length, 0);
   const accepted  = (session.steps ?? []).some(st => st.iterations.some(it => it.verdict === 'ACCEPT'));
   genState.status = `Loaded — ${totalIter} iteration${totalIter !== 1 ? 's' : ''} (${accepted ? 'accepted' : 'not accepted'})`;
+  genState.activeStepIndex = null;
+  genState.totalSteps      = 0;
+  genState.activeStepLabel = '';
+  genState.activeStepPct   = 0;
   return session;
 }
 
@@ -361,6 +365,10 @@ export function clearSession() {
   genState.steps      = [];
   genState.status     = '';
   genState.iterBadge  = '';
+  genState.activeStepIndex = null;
+  genState.totalSteps      = 0;
+  genState.activeStepLabel = '';
+  genState.activeStepPct   = 0;
 }
 
 export function connectToBroadcast() {
