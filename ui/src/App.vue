@@ -32,6 +32,7 @@
           v-if="genState.steps.length || genState.status"
           :steps="genState.steps"
           :status="genState.status"
+          :iter-badge="genState.iterBadge"
           :session-id="genState.sessionId"
           :running="genState.running"
         />
