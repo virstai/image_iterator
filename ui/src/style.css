@@ -25,11 +25,55 @@ header {
 header h1 { font-size: 17px; font-weight: 600; letter-spacing: .4px; }
 .header-right { display: flex; align-items: center; gap: 8px; }
 
-#active-model-select {
-  background: var(--surface); border: 1px solid var(--border); color: var(--text);
-  padding: 5px 8px; border-radius: 4px; font-size: 13px; max-width: 220px;
+/* ── Workflow selector (header custom dropdown) ───────────────────────────── */
+.wf-select { position: relative; }
+
+.wf-select-trigger {
+  display: flex; align-items: center; gap: 6px;
+  background: var(--surface); border: 1px solid var(--border);
+  color: var(--text); border-radius: 4px;
+  padding: 5px 10px; font-size: 13px; font-family: inherit;
+  cursor: pointer; max-width: 220px; white-space: nowrap;
+  transition: border-color .15s;
 }
-#active-model-select:focus { outline: none; border-color: var(--accent); }
+.wf-select-trigger:hover,
+.wf-select--open .wf-select-trigger { border-color: var(--accent); }
+
+.wf-select-value {
+  flex: 1; overflow: hidden; text-overflow: ellipsis; text-align: left;
+  min-width: 0;
+}
+.wf-select-chevron {
+  color: var(--muted); font-size: 11px; flex-shrink: 0;
+  transition: transform .15s;
+}
+.wf-select--open .wf-select-chevron { transform: rotate(180deg); }
+
+.wf-select-menu {
+  position: absolute; top: calc(100% + 4px); left: 0;
+  min-width: 100%; max-width: 280px;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 4px;
+  z-index: 200; box-shadow: 0 6px 20px rgba(0,0,0,.45);
+  display: flex; flex-direction: column; gap: 1px;
+}
+
+.wf-select-option {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 10px;
+  padding: 7px 10px; border-radius: 4px;
+  background: none; border: none;
+  color: var(--text); font-size: 13px; font-family: inherit;
+  cursor: pointer; text-align: left; white-space: nowrap;
+  transition: background .1s;
+}
+.wf-select-option:hover    { background: var(--surface2); }
+.wf-select-option.is-active { background: color-mix(in srgb, var(--accent) 18%, var(--surface2)); color: var(--accent); }
+
+.wf-select-option-label { font-weight: 500; }
+.wf-select-option-meta  { font-size: 11px; color: var(--muted); flex-shrink: 0; }
+.wf-select-option.is-active .wf-select-option-meta { color: color-mix(in srgb, var(--accent) 60%, var(--muted)); }
+
+.wf-select-empty { padding: 8px 10px; font-size: 12px; color: var(--muted); }
 
 /* ── Panels ───────────────────────────────────────────────────────────────── */
 .panel {
@@ -68,7 +112,7 @@ label textarea { resize: vertical; }
 .panel-actions { display: flex; gap: 8px; margin-top: 6px; flex-wrap: wrap; }
 
 /* ── Model list ───────────────────────────────────────────────────────────── */
-#model-list { list-style: none; margin-bottom: 12px; display: flex; flex-direction: column; gap: 6px; }
+#model-list, #workflow-list { list-style: none; margin-bottom: 12px; display: flex; flex-direction: column; gap: 6px; }
 #model-list li {
   display: flex; align-items: center; justify-content: space-between;
   background: var(--bg); border: 1px solid var(--border); border-radius: 4px;
