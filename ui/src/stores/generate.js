@@ -7,8 +7,12 @@ export const genState = reactive({
   sessionId:  null,
   loadedDesc: null,
   loadedRefs: null,
-  running:    false,
-  steps:      [], // array of step objects, each with its own iterations[]
+  running:         false,
+  activeStepIndex: null,
+  totalSteps:      0,
+  activeStepLabel: '',
+  activeStepPct:   0,
+  steps:           [], // array of step objects, each with its own iterations[]
 });
 
 let _hasDirectStream = false;
@@ -69,6 +73,10 @@ export function handleEvent(event, data) {
       const step  = ensureStep(data.index);
       step.type   = data.type;
       step.label  = data.label;
+      genState.activeStepIndex = data.index;
+      genState.totalSteps      = data.total ?? genState.steps.length;
+      genState.activeStepLabel = data.label;
+      genState.activeStepPct   = 0;
       // Clear any pending acceptance badges from previous steps
       for (let i = 0; i < data.index; i++) {
         const prev = genState.steps[i];
@@ -115,6 +123,7 @@ export function handleEvent(event, data) {
       const it = ensureIteration(si, data.iteration);
       it.progress = data.pct;
       it.status   = `Generating… ${data.pct}%`;
+      if (data.step === genState.activeStepIndex) genState.activeStepPct = data.pct;
       break;
     }
 
@@ -191,6 +200,10 @@ export function handleEvent(event, data) {
       genState.status    = data.accepted ? 'Accepted' : 'Done — max iterations reached';
       genState.iterBadge = '';
       genState.running   = false;
+      genState.activeStepIndex = null;
+      genState.totalSteps      = 0;
+      genState.activeStepLabel = '';
+      genState.activeStepPct   = 0;
       genState.steps.forEach(st => st.iterations.forEach(it => { it.acceptedPending = false; }));
       genState.loadedDesc = data.accepted ? null : (data.prompt || '');
       break;
@@ -200,12 +213,20 @@ export function handleEvent(event, data) {
       genState.status    = 'Stopped';
       genState.iterBadge = '';
       genState.running   = false;
+      genState.activeStepIndex = null;
+      genState.totalSteps      = 0;
+      genState.activeStepLabel = '';
+      genState.activeStepPct   = 0;
       break;
 
     case 'error':
       genState.status    = `Error: ${data.message}`;
       genState.iterBadge = '';
       genState.running   = false;
+      genState.activeStepIndex = null;
+      genState.totalSteps      = 0;
+      genState.activeStepLabel = '';
+      genState.activeStepPct   = 0;
       break;
   }
 }
