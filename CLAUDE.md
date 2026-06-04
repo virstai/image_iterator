@@ -27,13 +27,13 @@ This is an active refactor branch. **Do not merge to main until all phases are c
 
 ### Phase status
 
-| Phase | Status | Summary |
-|-------|--------|---------|
-| 1 — Rename + step registry + LLM abstraction | ✅ Done | Committed `2bd2627` |
-| 2 — Workflow entity | ✅ Done | |
-| 3 — Reference handling | Pending | img2img, vision notes, drop zone |
-| 4 — Upscale step | Pending | upscale.js, multi-step UI |
-| 5 — Reference adapters | Pending | IPAdapter/Redux/Kontext |
+| Phase | Status | Commit |
+|-------|--------|--------|
+| 1 — Rename + step registry + LLM abstraction | ✅ Done | `2bd2627` |
+| 2 — Workflow entity | ✅ Done | `800e1d4` |
+| 3 — Reference handling | ⏳ Next | see spec below |
+| 4 — Upscale step | Pending | — |
+| 5 — Reference adapters | Pending | — |
 | 6 — Video step | Deferred | — |
 
 ---
@@ -42,17 +42,18 @@ This is an active refactor branch. **Do not merge to main until all phases are c
 
 ### Two entities
 
-**Model** (`cfg.models[id]`) — thin asset grouping only. No skill, no sampling params.
+**Model** (`cfg.models[id]`) — thin asset grouping, loader fields only.
 ```jsonc
 {
   "id": "sdxl-base", "label": "SDXL Base", "architecture": "sdxl",
   "checkpoint": "sdXL_v10.safetensors", "vae": "sdxl_vae.safetensors"
-  // also: unetName, clipL, t5xxl, clipName, vaeName (for split-load archs)
+  // split-load archs also: unetName, clipL, t5xxl, clipName, vaeName
+  // sdxl: useRefiner, refinerCheckpoint
 }
 ```
 
 **Workflow** (`cfg.workflows[id]`) — the driver. Owns skill + notes, gen params,
-reference strategy, ordered steps, per-step review. **This is the active-selected entity.**
+reference strategy, ordered steps, per-step review. **Active-selected entity.**
 ```jsonc
 {
   "id": "portrait-4x", "label": "Portrait → 4x",
@@ -60,7 +61,8 @@ reference strategy, ordered steps, per-step review. **This is the active-selecte
     {
       "type": "generate", "modelId": "sdxl-base",
       "params": { "width": 1024, "height": 1024, "steps": 30, "cfgScale": 7,
-                  "sampler": "dpmpp_2m", "scheduler": "karras", "negativePrompt": "..." },
+                  "sampler": "dpmpp_2m", "scheduler": "karras", "negativePrompt": "...",
+                  "refinerSwitchAt": 0.8 },
       "referenceStrategy": {
         "visionNotes": true,
         "diffusion": {
@@ -79,14 +81,14 @@ reference strategy, ordered steps, per-step review. **This is the active-selecte
 }
 ```
 
-Skill + notes live in `data/skills/<workflowId>.json`, keyed by **workflow ID** (Phase 2
-will re-key from the current modelId keying).
+Skill + notes live in `data/skills/<workflowId>.json`, keyed by workflow ID.
 
-### Session data model (Phase 1 shape, already live)
+### Session data model (current, Phase 2)
 ```jsonc
 {
-  "id": "...", "prompt": "...", "modelId": "...", "modelLabel": "...",
-  "workflowId": null,
+  "id": "...", "prompt": "...",
+  "workflowId": "portrait-4x", "workflowLabel": "Portrait → 4x",
+  "references": [],
   "steps": [
     { "type": "generate", "label": "SDXL Base", "modelId": "sdxl-base",
       "iterations": [ { "prompt": "...", "imageUrl": "...", "verdict": "ACCEPT", "diagnosis": "..." } ],
@@ -95,128 +97,68 @@ will re-key from the current modelId keying).
   "status": "complete", "createdAt": "..."
 }
 ```
+`references` is always `[]` until Phase 3. Each entry will be `{ filename, subfolder, type }` — a ComfyUI image ref.
 
-### SSE events (Phase 1 shape, already live)
-All events carry a `step` field (0-indexed step index). New event:
-- `step` — `{ index, type, label, total }` — emitted at the start of each step.
+### SSE events (current)
+All events carry `step` (0-indexed). Key events:
+- `step` — `{ index, type, label, total }` — start of each step
+- `phase`, `token`, `prompt`, `progress`, `image`, `review`, `human_review`,
+  `human_verdict`, `accepted_pending`, `acceptance_refused`, `done`, `error`
 
-Existing events (`phase`, `token`, `prompt`, `progress`, `image`, `review`,
-`human_review`, `human_verdict`, `accepted_pending`, `acceptance_refused`, `done`)
-now include `{ step: N, ... }`.
+`pendingReviews` / `pendingAcceptances` keyed by `"${sessionId}:${stepIndex}"`.
 
-`pendingReviews` / `pendingAcceptances` keys are `"${sessionId}:${stepIndex}"`.
-
-### LLM abstraction (Phase 1, already live)
-All LLM calls go through `src/services/llm.js`:
-- `llm.chatStream(cfg, messages, onToken)` — streaming (prompt build + review)
+### LLM abstraction (current)
+All LLM calls through `src/services/llm.js`:
+- `llm.chatStream(cfg, messages, onToken)` — streaming
 - `llm.chat(cfg, messages)` — non-streaming (skill refresh)
-- `llm.listModels(cfg)` — enumerate available models
+- `llm.listModels(cfg)` — enumerate models
 
-Active provider set by `cfg.llmProvider` (default `'ollama'`). Provider modules live in
+Provider set by `cfg.llmProvider` (default `'ollama'`). Provider modules in
 `src/services/providers/<name>.js` — each implements `{ chat, chatStream, listModels }`.
-Currently only `ollama`. The Ollama provider reads `cfg.ollamaUrl` and `cfg.llmModel`.
+Ollama provider reads `cfg.ollamaUrl` and `cfg.llmModel`.
 
-Config rename: `ollamaModel` → `llmModel`. Back-compat shim in `config.load()` copies
-`ollamaModel` → `llmModel` for existing configs.
+### Step registry (current)
+`src/steps/index.js` — `get(type)` → step module.
+`src/steps/generate.js` — `{ label, prepare, buildComfyWorkflow, reviewMessages }`.
 
-### Step registry (Phase 1, already live)
-`src/steps/index.js` — `get(type)` returns the step module.
-`src/steps/generate.js` — implements `{ label, prepare, buildComfyWorkflow, reviewMessages }`.
-
-Interface each step must implement:
+Step interface:
 ```js
-label(stepDef, cfg)                                    // display name
+label(stepDef, cfg)
 prepare(stepDef, ctx, previousIterations, onToken)     // → { prompt, params }
 buildComfyWorkflow(stepDef, prepareResult, ctx)        // → ComfyUI node graph
-reviewMessages(stepDef, prepareResult, ctx, imageBase64, previousIterations)  // → messages[]
+reviewMessages(stepDef, prepareResult, ctx, imageBase64, previousIterations)
 ```
 
 `ctx` shape: `{ userPrompt, modelConfig, skillId, inputImage, references, cfg }`.
+- `skillId` = `session.workflowId` (set in `runStep`)
+- `inputImage` = previous step's output URL (step chaining)
+- `references` = `[]` until Phase 3
 
-### Orchestration (Phase 1, already live)
+### Orchestration (current)
 `runPipeline(session, pipelineDef, cfg, res)` — iterates steps, threads `ctx.inputImage`.
-`runStep(stepDef, stepIndex, session, ctx, cfg, res)` — per-step inner loop with per-step
-review settings (`stepDef.review` overrides global `cfg.*`).
+`runStep(stepDef, stepIndex, session, ctx, cfg, res)` — per-step loop; per-step review
+settings from `stepDef.review` override global `cfg.*`.
 
----
-
-## Phase 2 — Workflow entity
-
-**Goal:** Introduce `cfg.workflows` as the real config entity. The app header's active
-selector becomes "active Workflow." Model is demoted to a loader-only building block.
-Skill + notes move from `modelId` keying to `workflowId` keying.
-
-### What to build
-
-**`src/services/config.js`**
-- Add `workflows: {}` + `activeWorkflow: null` to `GLOBAL_DEFAULTS`.
-- Add `saveWorkflow(id, data)`, `deleteWorkflow(id)`, `activeWorkflow()` — mirror the
-  existing `saveModel`/`deleteModel`/`activeModel` helpers.
-- Trim `saveModel` to only persist loader fields (strip any sampling params that got
-  saved before this refactor).
-- No migration shim needed (user confirmed they'll clear old data).
-
-**`src/services/skills.js` + `src/services/skillRefresher.js`**
-- Currently keyed by `modelId`. Change the key to `workflowId` everywhere.
-- `refreshSkill(workflowId, workflowLabel, arch, correctionNote)` — arch stays because
-  the skill prompt references the arch name.
-- `skills.getSummary(workflowId)`, `skills.record(workflowId, ...)`.
-- The generate step (`src/steps/generate.js`) currently passes `stepDef.modelId` as
-  `skillId` in ctx. After Phase 2, `ctx.skillId` = `session.workflowId`.
-
-**`src/routes/sessions.js`**
-- New workflow CRUD: `GET/POST /api/sessions/workflows`, `PUT/DELETE /api/sessions/workflows/:id`.
-- Add active-workflow endpoint: `PATCH /api/sessions/config` already handles arbitrary
-  keys, so `{ activeWorkflow: id }` just works — just wire up the UI.
-- `GET /api/sessions/skills/:workflowId` — same route, just the ID changes semantics.
-- `GET /api/sessions/architectures` — unchanged.
-- `GET /api/sessions/assets` — unchanged (no upscalers yet, that's Phase 4).
-
-**`src/routes/generate.js`**
-- `POST /api/generate` — resolve `cfg.activeWorkflow` instead of `cfg.activeModel`.
-  Build `pipelineDef` from `workflow.steps` instead of the current implicit
-  single-generate-step. Pass `session.workflowId` into ctx so skill lookups use it.
-- `POST /api/generate/run` — accept `workflowId` override.
-- `POST /api/generate/continue/:id` — reconstruct pipelineDef from `session.workflowId`
-  → `cfg.workflows[workflowId].steps`.
-- Session creation: set `workflowId: workflow.id`.
-- After pipeline: `refreshSkill(session.workflowId, workflow.label, arch)`.
-
-**`src/steps/generate.js`**
-- `prepare` currently does `skills.getSummary(ctx.skillId)` where `skillId = stepDef.modelId`.
-  After Phase 2: `skillId = ctx.workflowId`. No other change needed.
-
-**`ui/src/components/AppHeader.vue`**
-- Active selector binds to `config.activeWorkflow` (workflows map) instead of
-  `config.activeModel` (models map).
-- Emit `set-active-workflow` instead of `set-active-model`.
-
-**`ui/src/stores/config.js`**
-- Add `saveWorkflow(id, data)`, `deleteWorkflow(id)`, `setActiveWorkflow(id)`.
-- Keep `saveModel`, `deleteModel` for the trimmed Model building-block management.
-
-**New: `ui/src/components/WorkflowsPanel.vue`**
-- Lists workflows; "Use" sets active; "Edit" opens `WorkflowEditor`.
-- "+ Add workflow" opens editor in create mode.
-
-**New: `ui/src/components/WorkflowEditor.vue`**
-- Per-step list builder:
-  - **Generate step**: pick Model (from `cfg.models`), set `params` (width/height/steps/
-    cfg/guidance/sampler/scheduler/negativePrompt — these fields move out of `ModelEditor`),
-    set `referenceStrategy`, set `review` (maxIterations/humanReview/gracePeriod).
-  - **Skill + notes** section (moved from `ModelEditor`), keyed by workflow id.
-  - Future: upscale step (Phase 4).
-- Save calls `POST /api/sessions/workflows` or `PUT /api/sessions/workflows/:id`.
-
-**`ui/src/components/ModelEditor.vue`**
-- **Remove** from the form: width, height, steps, cfgScale, guidance, sampler, scheduler,
-  negativePrompt, refinerSwitchAt, skill section, notes section.
-- **Keep**: label, architecture, checkpoint, unetName, clipL, t5xxl, clipName, vaeName,
-  vae, splitLoad toggle, useRefiner + refinerCheckpoint (these are loader concerns).
-
-**`ui/src/components/ModelsPanel.vue`**
-- Remove the "Use" / active-model semantics. Models are now pure building blocks.
-- Keep Edit / Delete.
+### Config shape (current)
+```jsonc
+{
+  "ollamaUrl":             "http://127.0.0.1:11434",
+  "comfyuiUrl":            "http://127.0.0.1:8188",
+  "llmProvider":           "ollama",
+  "llmModel":              "gemma4:31b",
+  "activeWorkflow":        "portrait-4x",
+  "maxIterations":         3,
+  "humanReview":           false,
+  "acceptanceGracePeriod": 10,
+  "models": {
+    "sdxl-base": { "id": "sdxl-base", "label": "SDXL Base", "architecture": "sdxl",
+                   "checkpoint": "sdXL_v10.safetensors", "vae": "sdxl_vae.safetensors" }
+  },
+  "workflows": {
+    "portrait-4x": { "id": "portrait-4x", "label": "Portrait → 4x", "steps": [ ... ] }
+  }
+}
+```
 
 ---
 
@@ -229,74 +171,233 @@ src/
     sessions.js       — config/models/workflows/skills/assets API
     sdapi.js          — A1111 compat shim (calls /api/generate/run internally)
   services/
-    config.js         — load/save, model + workflow CRUD helpers
+    config.js         — load/save, model + workflow CRUD, activeWorkflow()
     db.js             — session persistence (JSON files in data/sessions/)
-    skills.js         — skill/notes read/write (data/skills/<id>.json)
-    skillRefresher.js — LLM-driven skill synthesis; loads config internally
-    llm.js            — provider router (chatStream / chat / listModels)
+    skills.js         — skill/notes read/write (data/skills/<workflowId>.json)
+    skillRefresher.js — LLM-driven skill synthesis
+    llm.js            — provider router
     comfyui.js        — ComfyUI HTTP + WebSocket client
     providers/
       ollama.js       — Ollama LLM driver
   steps/
-    index.js          — step-type registry (get(type) → module)
-    generate.js       — generate step (prepare / buildComfyWorkflow / reviewMessages)
+    index.js          — step-type registry
+    generate.js       — generate step implementation
   workflows/
-    index.js          — buildWorkflow(modelConfig, params) + getDefaults(arch)
+    index.js          — buildWorkflow(modelConfig, params) + getDefaults(arch) + archMeta
     sd15.js / sdxl.js / flux.js / flux2.js / sd3.js / chroma.js / anima.js
   lib/
     parsers.js        — parsePromptResponse, parseReview
 ui/src/
   stores/
     config.js         — configState, loadConfig, saveConfig, model/workflow CRUD
-    generate.js       — genState (steps[]), handleEvent, SSE stream helpers
+    generate.js       — genState, handleEvent, SSE stream helpers
   components/
-    AppHeader.vue     — active workflow selector, panel buttons
-    GenerateSection.vue — prompt input + (future) reference image drop zone
-    RunSection.vue    — renders step groups with IterationCard grids
-    IterationCard.vue — thumbnail for one iteration
-    IterationModal.vue — full iteration detail + human review + refuse
-    ModelsPanel.vue   — model list (building blocks only after Phase 2)
-    ModelEditor.vue   — loader fields only after Phase 2
-    SettingsPanel.vue — global settings (ollamaUrl, comfyuiUrl, llmModel, etc.)
-    HistoryPanel.vue  — past sessions list
-    WorkflowsPanel.vue — (Phase 2) workflow list + active selector
-    WorkflowEditor.vue — (Phase 2) workflow step builder + skill/notes
+    AppHeader.vue       — active workflow selector + panel buttons
+    GenerateSection.vue — prompt input (Phase 3: + reference drop zone)
+    RunSection.vue      — step group renderer
+    IterationCard.vue   — single iteration thumbnail
+    IterationModal.vue  — full detail + human review + refuse
+    ModelsPanel.vue     — model building-blocks list
+    ModelEditor.vue     — loader fields, data-driven from archMeta.fields
+    WorkflowsPanel.vue  — workflow list + active selector
+    WorkflowEditor.vue  — step builder (generate params + review + referenceStrategy)
+    SettingsPanel.vue   — global settings
+    HistoryPanel.vue    — past sessions list
 data/
   config.json         — models, workflows, activeWorkflow, global settings
   sessions/*.json     — one file per session
-  skills/*.json       — one file per model/workflow id
+  skills/*.json       — one file per workflow id
 ```
 
-## Config shape (target after Phase 2)
-
-```jsonc
-{
-  "ollamaUrl":            "http://127.0.0.1:11434",
-  "comfyuiUrl":           "http://127.0.0.1:8188",
-  "llmProvider":          "ollama",
-  "llmModel":             "gemma4:31b",
-  "activeWorkflow":       "portrait-4x",
-  "maxIterations":        3,
-  "humanReview":          false,
-  "acceptanceGracePeriod": 10,
-  "models": {
-    "sdxl-base": { "id": "sdxl-base", "label": "SDXL Base", "architecture": "sdxl",
-                   "checkpoint": "sdXL_v10.safetensors", "vae": "sdxl_vae.safetensors" }
-  },
-  "workflows": {
-    "portrait-4x": { "id": "portrait-4x", "label": "Portrait → 4x", "steps": [ ... ] }
-  }
-}
-```
+---
 
 ## Testing
 
 ```bash
-npm test               # runs all: unit/db, unit/parsers, unit/skillRefresher, unit/skills,
-                       # integration/generate, integration/sdapi
+npm test               # all 65 tests
 npm run test:unit      # unit tests only
 npm run test:int       # integration tests only
 ```
 
-Fake servers are in `test/support/fakeServers.js` (Ollama + ComfyUI stubs).
-Integration tests write to a tmpDir and set `DATA_DIR` / `SESSIONS_DIR` / `SKILLS_DIR`.
+Fake servers in `test/support/fakeServers.js` (Ollama + ComfyUI stubs).
+Integration tests write to a tmpDir; set `DATA_DIR` / `SESSIONS_DIR` / `SKILLS_DIR`.
+
+---
+
+## Phase 3 — Reference handling
+
+**Goal:** Allow 0–N reference images to be dropped in `GenerateSection`. References are
+uploaded to ComfyUI upfront, then flow through the pipeline via `ctx.references`.
+`referenceStrategy` on each generate step drives how they're used.
+
+### Reference lifecycle
+
+1. User drops files in the UI drop zone in `GenerateSection.vue`.
+2. UI calls `POST /api/references/upload` with the files (multipart form).
+3. Server uploads each image to ComfyUI's `POST /upload/image` endpoint.
+4. Server returns `[{ filename, subfolder, type }]` — ComfyUI image refs.
+5. UI stores the refs and shows thumbnails. Each generate call includes
+   `references: [...]` in the request body.
+6. Server stores refs on `session.references` and passes them into `ctx.references`.
+7. Each generate step reads `ctx.references` + `stepDef.referenceStrategy`.
+
+### What to build
+
+**`src/services/comfyui.js`**
+- Add `uploadImage(buffer, filename)` — `POST /upload/image` multipart to ComfyUI,
+  returns `{ filename, subfolder, type }`.
+
+**New: `src/routes/references.js`** (mount at `/api/references`)
+- `POST /api/references/upload` — accepts multipart form data (`files` field, one or
+  more images). For each file, calls `comfyui.uploadImage(buffer, originalname)`.
+  Returns `[{ filename, subfolder, type }]`.
+- Mount in `server.js` as `/api/references`.
+
+**`src/routes/generate.js`**
+- `POST /api/generate`: accept `references: [{ filename, subfolder, type }]` in body.
+  Set `session.references = references ?? []`. Populate `ctx.references`.
+- `POST /api/generate/run`: same.
+- `POST /api/generate/continue/:id`: restore `ctx.references` from `session.references`.
+
+**`src/steps/generate.js`**
+
+`prepare()` — vision notes:
+```js
+// If visionNotes and references present, fetch each as base64 and prepend
+// an extra user message with the images before the prompt-building message.
+// Shape: { role: 'user', content: 'Reference images:', images: [base64, ...] }
+```
+
+`buildComfyWorkflow()` — diffusion strategy:
+```js
+const rs = stepDef.referenceStrategy?.diffusion;
+const refCount = ctx.references?.length ?? 0;
+
+if (refCount === 0 || !rs || rs.none === 'txt2img') {
+  // current behavior — txt2img
+} else if (refCount === 1 && rs.one?.mode === 'init-image') {
+  // img2img: pass ctx.references[0] as init image, rs.one.denoise as denoise
+} else if (refCount > 1 && rs.many?.mode === 'adapter') {
+  // Phase 5 — not implemented yet, fall through to txt2img
+}
+```
+
+**Workflow builders — img2img support**
+
+Each architecture's `build(params)` needs to handle `params.initImage` (a ComfyUI
+image ref `{ filename, subfolder, type }`) and `params.denoise` (0–1).
+
+When `params.initImage` is set:
+- Add a `LoadImage` node pointing to the init image
+- Encode to latent via `VAEEncode`
+- Use the encoded latent as `KSampler.latent_image` instead of `EmptyLatentImage`
+- Set `KSampler.denoise = params.denoise ?? 0.6`
+
+Architectures to update: `sd15.js`, `sdxl.js`, `flux.js`, `flux2.js`, `sd3.js`,
+`chroma.js`, `anima.js`.
+
+**`buildComfyWorkflow` in `src/steps/generate.js`**:
+```js
+function buildComfyWorkflow(stepDef, prepareResult, ctx) {
+  const rs       = stepDef.referenceStrategy?.diffusion;
+  const refs     = ctx.references ?? [];
+  const initImage = refs.length === 1 && rs?.one?.mode === 'init-image'
+    ? refs[0] : null;
+  const denoise   = rs?.one?.denoise ?? 0.6;
+
+  const { workflow } = buildArchWorkflow(ctx.modelConfig, {
+    ...prepareResult.params,
+    ...(initImage ? { initImage, denoise } : {}),
+  });
+  return workflow;
+}
+```
+
+**`ui/src/components/GenerateSection.vue`**
+- Add a reference drop zone below the textarea:
+  - `<input type="file" multiple accept="image/*">` + drag-and-drop area
+  - On file selection: call `POST /api/references/upload` with FormData
+  - Store returned refs in a local `references` ref
+  - Show thumbnails; allow removing individual refs
+- Pass `references` along with the `generate` emit (or store in a shared state)
+- `startGeneration(prompt, references)` in `stores/generate.js` includes refs in body
+
+**`ui/src/stores/generate.js`**
+- `startGeneration(prompt, references = [])` — include `references` in the POST body.
+- `continueSession(sessionId, references = [])` — same for continue.
+
+**`ui/src/components/WorkflowEditor.vue`**
+- Add `referenceStrategy` section to each generate step:
+  - **Vision notes** checkbox (`referenceStrategy.visionNotes`)
+  - **When one reference**: dropdown: `txt2img` / `init-image` (with denoise slider)
+  - **When many references**: dropdown: `txt2img` / `adapter (Phase 5 — disabled)`
+- The `referenceStrategy` object is saved as part of the step in the workflow config.
+
+**`GET /api/sessions/assets`**
+- No change needed for Phase 3.
+
+### Integration test additions
+
+Add `test/integration/references.test.js`:
+- `POST /api/references/upload` — multipart with a PNG, verify ComfyUI `/upload/image`
+  was called, verify the response shape.
+- `POST /api/generate` with `references: [...]` — verify `session.references` is stored,
+  verify the `ctx.references` flows to the generate step (mock step can inspect ctx).
+
+Add to `test/support/fakeServers.js`:
+- Handle `POST /upload/image` in `makeFakeComfyUI` — return
+  `{ name: "uploaded.png", subfolder: "", type: "input" }`.
+
+---
+
+## Phase 4 — Upscale step
+
+**Goal:** Add a second step type `upscale` that takes the previous step's output image,
+upscales it via ComfyUI's `UpscaleModelLoader` + `ImageUpscaleWithModel`, and feeds
+it back into the pipeline.
+
+### What to build
+
+**`src/steps/upscale.js`** — new step module:
+```js
+label(stepDef, cfg)                     // → e.g. "4x-UltraSharp ×2"
+prepare(stepDef, ctx, _, onToken)       // no-op prompt building; returns {}
+buildComfyWorkflow(stepDef, _, ctx)     // UpscaleModelLoader + ImageUpscaleWithModel
+                                        // + optional crop/scale-down to target size
+reviewMessages(stepDef, _, ctx, imageBase64, previousIterations)
+                                        // simple sharpness / artefact review
+```
+
+`stepDef` shape:
+```jsonc
+{ "type": "upscale", "upscaleModel": "4x-UltraSharp.pth", "factor": 2,
+  "review": { "maxIterations": 1, "humanReview": true, "gracePeriod": 0 } }
+```
+
+`ctx.inputImage` is the URL of the previous step's output — upscale step fetches it
+from ComfyUI, loads into the workflow as `LoadImageFromUrl` or via upload.
+
+**`src/steps/index.js`** — register `upscale` type.
+
+**`GET /api/sessions/assets`** — add `upscaleModels: []` to the response by calling
+`fetchInputList('UpscaleModelLoader', 'model_name')` in `comfyui.getAssets()`.
+
+**`ui/src/components/WorkflowEditor.vue`**
+- "+ Add upscale step" button — appends an upscale step to the steps array.
+- Upscale step form: model picker (from `assets.comfyui.upscaleModels`), factor
+  (2× / 4× radio), review settings.
+
+**`ui/src/components/AppHeader.vue`** — no change.
+
+---
+
+## Phase 5 — Reference adapters
+
+**Goal:** When `referenceStrategy.diffusion.many.mode === 'adapter'`, use IPAdapter
+(or Redux / Kontext for Flux) to condition generation on multiple reference images.
+
+Deferred until Phase 3 is stable. Phase 5 will add:
+- `IPAdapter` nodes to `sd15.js` / `sdxl.js` workflow builders
+- Redux / Kontext nodes to `flux.js` / `flux2.js`
+- The `many` branch in `buildComfyWorkflow` to activate these paths
+- Asset discovery for IPAdapter model files
