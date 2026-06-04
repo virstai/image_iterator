@@ -1,86 +1,136 @@
 <template>
-  <aside class="panel">
-    <div class="panel-header">
-      <h2>Workflows</h2>
-      <button class="close-btn" @click="$emit('close')">&#x2715;</button>
-    </div>
-
-    <div v-if="!editingId && !isAdding" id="workflow-list-section">
-      <ul id="workflow-list">
-        <li v-if="!Object.keys(config.workflows ?? {}).length" style="color:var(--muted);font-size:13px;padding:8px 0">
-          No workflows configured yet.
-        </li>
-        <li
+  <div class="two-pane">
+    <!-- Left: workflow list -->
+    <div class="two-pane-list">
+      <div class="two-pane-header">
+        <span class="two-pane-header-title">Workflows</span>
+        <button class="primary small" @click="startNew">+ New</button>
+      </div>
+      <div class="two-pane-list-body">
+        <div
           v-for="(wf, id) in config.workflows"
           :key="id"
-          :class="{ active: id === config.activeWorkflow }"
+          class="list-row"
+          :class="{ selected: selectedId === id }"
+          @click="select(id)"
         >
-          <div class="model-info">
-            <span class="model-label">{{ wf.label || id }}</span>
-            <span class="model-arch">{{ wf.steps?.length ?? 0 }} step{{ wf.steps?.length !== 1 ? 's' : '' }}</span>
-          </div>
-          <div class="model-actions">
-            <button class="small secondary" @click="setActive(id)">Use</button>
-            <button class="small secondary" @click="openEditor(id)">Edit</button>
-          </div>
-        </li>
-      </ul>
-      <button class="primary" @click="openEditor(null)">+ Add workflow</button>
+          <div class="list-row-name">{{ wf.label || id }}</div>
+          <div class="list-row-meta">{{ stepSummary(wf) }}</div>
+          <span v-if="id === config.activeWorkflow" class="list-row-active-chip">● Active</span>
+        </div>
+        <div v-if="!Object.keys(config.workflows ?? {}).length" style="font-size:12px;color:var(--muted);padding:8px 4px">
+          No workflows yet.
+        </div>
+      </div>
     </div>
 
-    <WorkflowEditor
-      v-else
-      :workflow-id="editingId"
-      :workflow="editingId ? config.workflows[editingId] : null"
-      :config="config"
-      :arch-meta="archMeta"
-      :assets="assets"
-      @saved="onSaved"
-      @deleted="onDeleted"
-      @cancel="closeEditor"
-    />
-  </aside>
+    <!-- Right: editor -->
+    <div class="two-pane-detail">
+      <template v-if="selectedId !== null">
+        <div class="editor-header">
+          <span class="editor-header-name">{{ isAdding ? 'New workflow' : (config.workflows[selectedId]?.label || selectedId) }}</span>
+          <button
+            v-if="!isAdding && selectedId !== config.activeWorkflow"
+            class="secondary small"
+            @click="setActive"
+          >Set active</button>
+          <span
+            v-else-if="!isAdding"
+            style="font-size:10px;color:var(--accent);background:color-mix(in srgb,var(--accent) 15%,transparent);padding:2px 8px;border-radius:8px"
+          >● Active</span>
+          <button v-if="!isAdding" class="secondary small" @click="duplicate" :disabled="saving">Duplicate</button>
+          <button v-if="!isAdding" class="danger small" @click="del" :disabled="saving">Delete</button>
+        </div>
+        <div class="two-pane-detail-body">
+          <WorkflowEditor
+            :key="selectedId"
+            :workflow-id="isAdding ? null : selectedId"
+            :workflow="isAdding ? null : config.workflows[selectedId]"
+            :config="config"
+            :arch-meta="archMeta"
+            :assets="assets"
+            @saved="onSaved"
+            @deleted="onDeleted"
+          />
+        </div>
+      </template>
+      <div v-else class="two-pane-placeholder">Select a workflow to edit</div>
+    </div>
+  </div>
 </template>
 
 <script setup>
 import { ref, onMounted } from 'vue';
 import WorkflowEditor from './WorkflowEditor.vue';
-import { setActiveWorkflow, loadAssets } from '../stores/config.js';
+import { setActiveWorkflow, saveWorkflow, deleteWorkflow, loadAssets } from '../stores/config.js';
 
 const props = defineProps({
   config:   { type: Object, default: () => ({}) },
   assets:   { type: Object, default: () => ({}) },
   archMeta: { type: Object, default: () => ({}) },
 });
-const emit = defineEmits(['changed', 'close']);
+const emit = defineEmits(['changed']);
 
-const editingId = ref(null);
-const isAdding  = ref(false);
+const selectedId = ref(null);
+const isAdding   = ref(false);
+const saving     = ref(false);
 
 onMounted(() => { loadAssets().catch(() => {}); });
 
-async function setActive(id) {
-  await setActiveWorkflow(id);
+function select(id) {
+  selectedId.value = id;
+  isAdding.value   = false;
+}
+
+function startNew() {
+  selectedId.value = '__new__';
+  isAdding.value   = true;
+}
+
+function stepSummary(wf) {
+  const STEP_LABELS = { generate: 'Generate', upscale: 'Upscale' };
+  if (!wf?.steps?.length) return 'No steps';
+  return wf.steps.map(s => STEP_LABELS[s.type] ?? s.type).join(' · ');
+}
+
+async function setActive() {
+  await setActiveWorkflow(selectedId.value);
   emit('changed');
 }
 
-function openEditor(id) {
-  editingId.value = id;
-  isAdding.value  = !id;
+async function duplicate() {
+  if (!selectedId.value || isAdding.value) return;
+  saving.value = true;
+  try {
+    const wf = props.config.workflows[selectedId.value];
+    await saveWorkflow(null, { ...JSON.parse(JSON.stringify(wf)), label: (wf.label || selectedId.value) + ' (copy)' });
+    emit('changed');
+  } finally {
+    saving.value = false;
+  }
 }
 
-function closeEditor() {
-  editingId.value = null;
-  isAdding.value  = false;
+async function del() {
+  if (!selectedId.value || isAdding.value) return;
+  if (!confirm(`Delete "${props.config.workflows[selectedId.value]?.label || selectedId.value}"?`)) return;
+  saving.value = true;
+  try {
+    await deleteWorkflow(selectedId.value);
+    selectedId.value = null;
+    emit('changed');
+  } finally {
+    saving.value = false;
+  }
 }
 
 async function onSaved() {
-  closeEditor();
+  isAdding.value = false;
   emit('changed');
 }
 
 async function onDeleted() {
-  closeEditor();
+  selectedId.value = null;
+  isAdding.value   = false;
   emit('changed');
 }
 </script>
