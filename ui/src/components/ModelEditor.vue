@@ -8,10 +8,20 @@
     </label>
 
     <label>Architecture
-      <select v-model="form.architecture">
-        <option value="">— select —</option>
-        <option v-for="(meta, key) in archMeta" :key="key" :value="key">{{ meta.label || key }}</option>
-      </select>
+      <div style="display:flex; align-items:center; gap:6px;">
+        <select v-model="form.architecture" style="flex:1;">
+          <option value="">— select —</option>
+          <option v-for="(meta, key) in archMeta" :key="key" :value="key">{{ meta.label || key }}</option>
+        </select>
+        <button
+          v-if="form.architecture"
+          type="button"
+          class="icon-btn"
+          style="flex-shrink:0;"
+          title="Setup guide for this architecture"
+          @click="showHelp = true"
+        >?</button>
+      </div>
     </label>
     <p v-if="archNotes" class="hint">{{ archNotes }}</p>
 
@@ -133,12 +143,20 @@
       <button class="secondary"             @click="$emit('cancel')">Cancel</button>
       <button v-if="modelId" class="danger" @click="remove">Delete</button>
     </div>
+
+    <ArchHelpModal
+      v-if="showHelp"
+      :arch="form.architecture"
+      :arch-label="archLabel"
+      @close="showHelp = false"
+    />
   </div>
 </template>
 
 <script setup>
-import { reactive, computed, watch } from 'vue';
+import { reactive, computed, watch, ref } from 'vue';
 import { saveModel, deleteModel } from '../stores/config.js';
+import ArchHelpModal from './ArchHelpModal.vue';
 
 const props = defineProps({
   modelId:  { type: String, default: null },
@@ -175,6 +193,8 @@ watch(() => props.model, m => {
 }, { immediate: true });
 
 const arch           = computed(() => form.architecture);
+const archLabel  = computed(() => props.archMeta[arch.value]?.label || arch.value);
+const showHelp   = ref(false);
 const loadingMode    = computed(() => props.archMeta[arch.value]?.loadingMode ?? '');
 const isForcedSplit  = computed(() => loadingMode.value === 'split');
 const canToggleSplit = computed(() => loadingMode.value === 'split-or-checkpoint');
