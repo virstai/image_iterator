@@ -25,6 +25,7 @@ function build(params) {
     guidance  = defaults.guidance,
     sampler   = defaults.sampler,
     scheduler = defaults.scheduler,
+    seed      = Math.floor(Math.random() * 2 ** 32),
     inputRef  = null,
     isI2V     = false,
   } = params;
@@ -65,7 +66,7 @@ function build(params) {
       class_type: "KSampler",
       inputs: {
         model: ["6", 0], positive: ["3", 0], negative: ["3", 1],
-        latent_image: ["4", 0], seed: 0, steps, cfg: guidance,
+        latent_image: ["4", 0], seed, steps, cfg: guidance,
         sampler_name: sampler, scheduler, denoise: 1.0,
       },
     };
@@ -91,7 +92,7 @@ function build(params) {
       class_type: "KSampler",
       inputs: {
         model: ["1", 0], positive: ["3", 0], negative: ["3", 1],
-        latent_image: ["4", 0], seed: 0, steps, cfg: guidance,
+        latent_image: ["4", 0], seed, steps, cfg: guidance,
         sampler_name: sampler, scheduler, denoise: 1.0,
       },
     };
