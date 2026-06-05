@@ -130,7 +130,7 @@ export function handleEvent(event, data) {
         const it = ensureIteration(si, data.iteration);
         it.progress = data.pct;
         it.status   = `Generating… ${data.pct}%`;
-        if (data.step === genState.activeStepIndex) genState.activeStepPct = data.pct;
+        if (si === genState.activeStepIndex) genState.activeStepPct = data.pct;
       }
       break;
     }
