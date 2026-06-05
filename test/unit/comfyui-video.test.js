@@ -29,7 +29,8 @@ async function withFakeHistory(historyBody, fn) {
   try {
     await fn(comfyui);
   } finally {
-    process.env.COMFYUI_URL = orig;
+    if (orig === undefined) delete process.env.COMFYUI_URL;
+    else process.env.COMFYUI_URL = orig;
     await new Promise(r => srv.close(r));
     delete require.cache[require.resolve('../../src/services/config')];
     delete require.cache[require.resolve('../../src/services/comfyui')];
