@@ -673,3 +673,20 @@ button:disabled  { opacity: .45; cursor: not-allowed; }
   border-color: var(--accent) !important;
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 30%, transparent);
 }
+
+/* ── Arch help modal prose ───────────────────────────────────────────────────── */
+.arch-help-body { font-size: 13px; line-height: 1.65; color: var(--text); }
+.arch-help-body h1 { font-size: 16px; font-weight: 700; margin-bottom: 14px; color: var(--text); }
+.arch-help-body h2 { font-size: 11px; font-weight: 700; margin: 18px 0 8px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+.arch-help-body h3 { font-size: 13px; font-weight: 600; margin: 14px 0 6px; }
+.arch-help-body p  { margin-bottom: 10px; }
+.arch-help-body ul, .arch-help-body ol { padding-left: 18px; margin-bottom: 10px; }
+.arch-help-body li { margin-bottom: 4px; }
+.arch-help-body a  { color: var(--accent); text-decoration: none; }
+.arch-help-body a:hover { text-decoration: underline; }
+.arch-help-body code { background: var(--bg); border: 1px solid var(--border); border-radius: 3px; padding: 1px 5px; font-size: 12px; font-family: monospace; }
+.arch-help-body blockquote { border-left: 3px solid var(--border); padding-left: 12px; color: var(--muted); margin: 10px 0; }
+.arch-help-body table { width: 100%; border-collapse: collapse; margin-bottom: 12px; }
+.arch-help-body th, .arch-help-body td { padding: 6px 10px; border: 1px solid var(--border); font-size: 12px; text-align: left; }
+.arch-help-body th { background: var(--surface2); font-weight: 600; color: var(--muted); }
+.arch-help-body hr { border: none; border-top: 1px solid var(--border); margin: 14px 0; }

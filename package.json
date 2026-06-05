@@ -19,6 +19,7 @@
   "type": "commonjs",
   "dependencies": {
     "express": "^5.2.1",
+    "marked": "^15.0.0",
     "uuid": "^14.0.0",
     "ws": "^8.21.0"
   },
