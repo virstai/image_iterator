@@ -17,18 +17,37 @@
             <span class="step-type-badge">{{ step.type }}</span>
             {{ step.label || step.type }}
           </div>
-          <div v-if="!step.iterations.length" style="font-size:11px;color:var(--muted);padding:4px 0">
-            Waiting…
-          </div>
-          <div v-else class="iter-grid">
-            <IterationCard
-              v-for="it in step.iterations"
-              :key="it.n"
-              :iteration="it"
-              :selected="isPinned(step.index, it.n)"
-              @open="onCardClick(step.index, it.n)"
-            />
-          </div>
+          <!-- Video step: progress bar then inline player -->
+          <template v-if="step.type === 'video'">
+            <div v-if="step.videoUrl" class="video-output">
+              <video :src="step.videoUrl" controls loop style="max-width:100%;border-radius:4px"></video>
+            </div>
+            <div v-else style="font-size:11px;color:var(--muted);padding:4px 0">
+              <template v-if="step.progress > 0">
+                Generating… {{ step.progress }}%
+                <div class="video-progress-bar">
+                  <div class="video-progress-fill" :style="{ width: step.progress + '%' }"></div>
+                </div>
+              </template>
+              <template v-else>Waiting…</template>
+            </div>
+          </template>
+
+          <!-- Normal steps: iteration card grid -->
+          <template v-else>
+            <div v-if="!step.iterations.length" style="font-size:11px;color:var(--muted);padding:4px 0">
+              Waiting…
+            </div>
+            <div v-else class="iter-grid">
+              <IterationCard
+                v-for="it in step.iterations"
+                :key="it.n"
+                :iteration="it"
+                :selected="isPinned(step.index, it.n)"
+                @open="onCardClick(step.index, it.n)"
+              />
+            </div>
+          </template>
         </div>
       </div>
 
@@ -118,3 +137,24 @@ watch(
   { deep: true }
 );
 </script>
+
+<style scoped>
+.step-label.type-video { border-left-color: #7c3aed; }
+
+.video-progress-bar {
+  height: 4px;
+  background: var(--border, #333);
+  border-radius: 2px;
+  margin-top: 4px;
+}
+.video-progress-fill {
+  height: 100%;
+  background: #7c3aed;
+  border-radius: 2px;
+  transition: width 0.3s;
+}
+
+.video-output {
+  padding: 4px 0;
+}
+</style>
