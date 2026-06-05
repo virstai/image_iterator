@@ -46,7 +46,7 @@ test('wanvideo I2V: includes LoadImage and WanVideoImageToVideoEncode', () => {
 test('wanvideo: WanVideoVAELoader uses vaeName', () => {
   const wf = build(BASE);
   const vaeLoader = Object.values(wf).find(n => n.class_type === 'WanVideoVAELoader');
-  assert.equal(vaeLoader.inputs.model, 'wan_vae.safetensors');
+  assert.equal(vaeLoader.inputs.model_name, 'wan_vae.safetensors');
 });
 
 test('wanvideo: WanVideoModelLoader uses unetName (no vae)', () => {
@@ -59,7 +59,7 @@ test('wanvideo: WanVideoModelLoader uses unetName (no vae)', () => {
 test('wanvideo: LoadWanVideoT5TextEncoder uses clipName', () => {
   const wf = build(BASE);
   const t5 = Object.values(wf).find(n => n.class_type === 'LoadWanVideoT5TextEncoder');
-  assert.equal(t5.inputs.model, 'umt5.safetensors');
+  assert.equal(t5.inputs.model_name, 'umt5.safetensors');
 });
 
 test('wanvideo: WanVideoSampler applies cfg and steps overrides', () => {

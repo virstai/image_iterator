@@ -16,9 +16,9 @@ const defaults = {
   frames:    81,
   fps:       16,
   steps:     20,
-  guidance:  5.0,
-  sampler:   'dpm++_sde',
-  scheduler: 'simple',
+  guidance:  6.0,
+  shift:     5.0,
+  scheduler: 'unipc',
 };
 
 function build(params) {
@@ -31,7 +31,7 @@ function build(params) {
     fps       = defaults.fps,
     steps     = defaults.steps,
     guidance  = defaults.guidance,
-    sampler   = defaults.sampler,
+    shift     = defaults.shift,
     scheduler = defaults.scheduler,
     seed      = Math.floor(Math.random() * 2 ** 32),
     inputRef  = null,
@@ -42,8 +42,8 @@ function build(params) {
     ? (inputRef.subfolder ? `${inputRef.subfolder}/${inputRef.filename}` : inputRef.filename)
     : null;
 
-  const isMoE      = !!unetName2;
-  const splitStep  = isMoE ? Math.ceil(steps / 2) : steps;
+  const isMoE     = !!unetName2;
+  const splitStep = isMoE ? Math.ceil(steps / 2) : steps;
 
   const nodes = {};
   let n = 1;
@@ -55,10 +55,9 @@ function build(params) {
     class_type: 'WanVideoModelLoader',
     inputs: {
       model:          unetName,
-      load_dtype:     'fp16_fast',
-      quantization:   'fp8_e4m3fn_scaled',
-      offload_device: 'offload_device',
-      attention_mode: 'sageattn',
+      base_precision: 'bf16',
+      quantization:   'disabled',
+      load_device:    'offload_device',
     },
   };
 
@@ -69,19 +68,18 @@ function build(params) {
       class_type: 'WanVideoModelLoader',
       inputs: {
         model:          unetName2,
-        load_dtype:     'fp16_fast',
-        quantization:   'fp8_e4m3fn_scaled',
-        offload_device: 'offload_device',
-        attention_mode: 'sageattn',
+        base_precision: 'bf16',
+        quantization:   'disabled',
+        load_device:    'offload_device',
       },
     };
   }
 
-  // ── VAE loader (separate from model loader in WanVideoWrapper) ────────────────
+  // ── VAE loader ────────────────────────────────────────────────────────────────
   const vaeId = id();
   nodes[vaeId] = {
     class_type: 'WanVideoVAELoader',
-    inputs: { model: vaeName, dtype: 'bf16' },
+    inputs: { model_name: vaeName },
   };
 
   // ── T5 text encoder ───────────────────────────────────────────────────────────
@@ -89,10 +87,8 @@ function build(params) {
   nodes[t5Id] = {
     class_type: 'LoadWanVideoT5TextEncoder',
     inputs: {
-      model:          clipName,
-      dtype:          'bf16',
-      offload_device: 'offload_device',
-      quantization:   'disabled',
+      model_name: clipName,
+      precision:  'bf16',
     },
   };
 
@@ -101,11 +97,10 @@ function build(params) {
   nodes[textEncId] = {
     class_type: 'WanVideoTextEncode',
     inputs: {
-      t5:             [t5Id, 0],
-      positive_text:  positivePrompt,
-      negative_text:  '',
-      cfg_use:        true,
-      encode_device:  'gpu',
+      positive_prompt: positivePrompt,
+      negative_prompt: '',
+      t5:              [t5Id, 0],
+      force_offload:   true,
     },
   };
 
@@ -122,13 +117,15 @@ function build(params) {
     nodes[imgEncId] = {
       class_type: 'WanVideoImageToVideoEncode',
       inputs: {
-        vae:                  [vaeId, 0],
-        start_image:          [loadImgId, 0],
         width,
         height,
         num_frames:           frames,
-        end_image_strength:   0,
-        batch_size:           1,
+        noise_aug_strength:   0.0,
+        start_latent_strength:1.0,
+        end_latent_strength:  1.0,
+        force_offload:        true,
+        vae:                  [vaeId, 0],
+        start_image:          [loadImgId, 0],
       },
     };
     imageEmbedsRef = [imgEncId, 0];
@@ -137,18 +134,22 @@ function build(params) {
   // ── Sampler(s) ────────────────────────────────────────────────────────────────
   const buildSamplerInputs = (modelRef, startStep, endStep, prevSamplesRef = null) => {
     const inp = {
-      model:      modelRef,
-      text_embeds:[textEncId, 0],
+      model:            modelRef,
       steps,
-      cfg:        guidance,
+      cfg:              guidance,
+      shift,
       seed,
-      seed_mode:  'fixed',
+      force_offload:    true,
       scheduler,
-      start_step: startStep,
-      end_step:   endStep,
+      riflex_freq_index:0,
+      text_embeds:      [textEncId, 0],
     };
     if (imageEmbedsRef) inp.image_embeds = imageEmbedsRef;
     if (prevSamplesRef) inp.samples      = prevSamplesRef;
+    if (isMoE) {
+      inp.start_step = startStep;
+      inp.end_step   = endStep;
+    }
     return inp;
   };
 
@@ -186,8 +187,8 @@ function build(params) {
       enable_vae_tiling: false,
       tile_x:            272,
       tile_y:            272,
-      tile_t:            144,
-      overlap:           128,
+      tile_stride_x:     144,
+      tile_stride_y:     128,
     },
   };
 
