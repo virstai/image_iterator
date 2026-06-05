@@ -22,7 +22,7 @@ const GLOBAL_DEFAULTS = {
 
 // Model loader fields only — sampling params live in workflow steps.
 const MODEL_LOADER_FIELDS = new Set([
-  'id', 'label', 'architecture', 'checkpoint', 'unetName', 'clipL', 't5xxl',
+  'id', 'label', 'architecture', 'checkpoint', 'unetName', 'unetName2', 'clipL', 't5xxl',
   'clipName', 'vaeName', 'vae', 'useRefiner', 'refinerCheckpoint',
   'adapterModel', 'clipVisionModel', 'adapterWeight',
 ]);
