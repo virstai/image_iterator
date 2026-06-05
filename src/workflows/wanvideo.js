@@ -129,7 +129,7 @@ function build(params) {
         num_frames:           frames,
         noise_aug_strength:   0.0,
         start_latent_strength:1.0,
-        end_latent_strength:  1.0,
+        end_latent_strength:  0.0,
         force_offload:        true,
         vae:                  [vaeId, 0],
         start_image:          [loadImgId, 0],
