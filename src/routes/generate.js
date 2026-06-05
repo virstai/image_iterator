@@ -77,7 +77,8 @@ async function runStep(stepDef, stepIndex, session, ctx, cfg, res, isKilled = ()
   const review      = stepDef.review ?? {};
   const maxNewIter  = review.maxIterations ?? cfg.maxIterations ?? 4;
   const humanReview = review.humanReview   ?? cfg.humanReview   ?? false;
-  const gracePeriod = review.gracePeriod   !== undefined ? review.gracePeriod : (cfg.acceptanceGracePeriod ?? 0);
+  const gracePeriod = cfg.bypassGracePeriod ? 0
+    : review.gracePeriod !== undefined ? review.gracePeriod : (cfg.acceptanceGracePeriod ?? 0);
   const pendingKey  = `${session.id}:${stepIndex}`;
 
   emit(res, 'step', { index: stepIndex, type: stepDef.type, label: stepData.label, total: session.steps.length });

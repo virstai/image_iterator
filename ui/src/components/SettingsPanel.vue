@@ -36,6 +36,9 @@
       <label class="checkbox-label" style="align-self:flex-end;padding-bottom:12px">
         <input type="checkbox" v-model="form.humanReview"> Human review after each iteration
       </label>
+      <label class="checkbox-label" style="align-self:flex-end;padding-bottom:12px">
+        <input type="checkbox" v-model="form.bypassGracePeriod"> Bypass grace period
+      </label>
     </div>
 
     <div class="panel-actions">
@@ -63,6 +66,7 @@ const form = reactive({
   maxIterations:         '',
   acceptanceGracePeriod: '',
   humanReview:           false,
+  bypassGracePeriod:     false,
 });
 
 watch(() => props.config, cfg => {
@@ -73,6 +77,7 @@ watch(() => props.config, cfg => {
   form.maxIterations         = cfg.maxIterations         ?? '';
   form.acceptanceGracePeriod = cfg.acceptanceGracePeriod ?? '';
   form.humanReview           = !!cfg.humanReview;
+  form.bypassGracePeriod     = !!cfg.bypassGracePeriod;
 }, { immediate: true });
 
 async function save() {
@@ -84,6 +89,7 @@ async function save() {
     maxIterations:         form.maxIterations         || null,
     acceptanceGracePeriod: form.acceptanceGracePeriod !== '' ? Number(form.acceptanceGracePeriod) : null,
     humanReview:           form.humanReview,
+    bypassGracePeriod:     form.bypassGracePeriod,
   });
   emit('saved');
 }
