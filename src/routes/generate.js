@@ -45,33 +45,9 @@ function waitForAcceptanceGrace(key, seconds) {
 
 // ── Step execution ────────────────────────────────────────────────────────────────
 
-async function runStep(stepDef, stepIndex, session, ctx, cfg, res, isKilled = () => false) {
-  const stepType = steps.get(stepDef.type);
+async function _runIterativeLoop(stepType, stepDef, stepIndex, session, ctx, cfg, res, isKilled = () => false) {
   const stepData = session.steps[stepIndex];
   const tag      = session.id.slice(0, 8);
-
-  // Resolve model context for generate steps
-  if (stepDef.type === 'generate') {
-    const modelConfig = cfg.models?.[stepDef.modelId];
-    if (!modelConfig) throw new Error(`Model "${stepDef.modelId}" not found in config`);
-    ctx = { ...ctx, modelConfig, skillId: session.workflowId };
-
-    // Chain the previous step's output as init-image input when available
-    if (ctx.inputImage) {
-      try {
-        const url       = new URL(ctx.inputImage, 'http://localhost');
-        const filename  = url.searchParams.get('filename') ?? 'image.png';
-        const subfolder = url.searchParams.get('subfolder') ?? '';
-        const type      = url.searchParams.get('type') ?? 'output';
-        const fetchUrl  = `${cfg.comfyuiUrl}/view?filename=${encodeURIComponent(filename)}&subfolder=${encodeURIComponent(subfolder)}&type=${encodeURIComponent(type)}`;
-        const imgRes    = await fetch(fetchUrl);
-        if (imgRes.ok) {
-          const buffer = Buffer.from(await imgRes.arrayBuffer());
-          ctx = { ...ctx, chainedInputRef: await comfyui.uploadImage(buffer, filename) };
-        }
-      } catch { /* chaining is best-effort */ }
-    }
-  }
 
   // Per-step review settings, falling back to global config
   const review      = stepDef.review ?? {};
@@ -210,6 +186,82 @@ async function runStep(stepDef, stepIndex, session, ctx, cfg, res, isKilled = ()
   return { accepted, outputImageUrl: stepData.outputImageUrl };
 }
 
+async function runGenerateStep(stepDef, stepIndex, session, ctx, cfg, res, isKilled = () => false) {
+  const modelConfig = cfg.models?.[stepDef.modelId];
+  if (!modelConfig) throw new Error(`Model "${stepDef.modelId}" not found in config`);
+  ctx = { ...ctx, modelConfig, skillId: session.workflowId };
+
+  if (ctx.inputImage) {
+    try {
+      const url       = new URL(ctx.inputImage, 'http://localhost');
+      const filename  = url.searchParams.get('filename') ?? 'image.png';
+      const subfolder = url.searchParams.get('subfolder') ?? '';
+      const type      = url.searchParams.get('type') ?? 'output';
+      const fetchUrl  = `${cfg.comfyuiUrl}/view?filename=${encodeURIComponent(filename)}&subfolder=${encodeURIComponent(subfolder)}&type=${encodeURIComponent(type)}`;
+      const imgRes    = await fetch(fetchUrl);
+      if (imgRes.ok) {
+        const buffer = Buffer.from(await imgRes.arrayBuffer());
+        ctx = { ...ctx, chainedInputRef: await comfyui.uploadImage(buffer, filename) };
+      }
+    } catch { /* chaining is best-effort */ }
+  }
+
+  const stepType = steps.get(stepDef.type);
+  return _runIterativeLoop(stepType, stepDef, stepIndex, session, ctx, cfg, res, isKilled);
+}
+
+async function runUpscaleStep(stepDef, stepIndex, session, ctx, cfg, res, isKilled = () => false) {
+  const stepType = steps.get(stepDef.type);
+  return _runIterativeLoop(stepType, stepDef, stepIndex, session, ctx, cfg, res, isKilled);
+}
+
+async function runVideoStep(stepDef, stepIndex, session, ctx, cfg, res, isKilled = () => false) {
+  const stepType  = steps.get('video');
+  const stepData  = session.steps[stepIndex];
+  const tag       = session.id.slice(0, 8);
+
+  const modelConfig = cfg.models?.[stepDef.modelId];
+  if (!modelConfig) throw new Error(`Video model "${stepDef.modelId}" not found in config`);
+  ctx = { ...ctx, modelConfig };
+
+  emit(res, 'step', { index: stepIndex, type: 'video', label: stepData.label, total: session.steps.length });
+  console.log(`[${tag}] step ${stepIndex} (video: ${stepData.label})`);
+
+  if (isKilled()) throw new Error('Generation stopped by user');
+
+  emit(res, 'phase', { step: stepIndex, phase: 'generating', iteration: 1 });
+  console.log(`[${tag}] step ${stepIndex}: preparing video…`);
+
+  const prepResult = await stepType.prepare(stepDef, ctx);
+
+  if (isKilled()) throw new Error('Generation stopped by user');
+
+  console.log(`[${tag}] step ${stepIndex}: queuing video ComfyUI job…`);
+  const workflow = stepType.buildComfyWorkflow(stepDef, prepResult, ctx);
+
+  const { videos } = await comfyui.generateVideo(
+    workflow,
+    pct => {
+      emit(res, 'progress', { step: stepIndex, pct });
+      process.stdout.write(`\r[${tag}] step ${stepIndex}: generating ${pct}%   `);
+    },
+  );
+  process.stdout.write('\n');
+
+  if (isKilled()) throw new Error('Generation stopped by user');
+  if (!videos.length) throw new Error('ComfyUI returned no video output');
+
+  const vid      = videos[0];
+  const videoUrl = `/api/video?filename=${encodeURIComponent(vid.filename)}&subfolder=${encodeURIComponent(vid.subfolder ?? '')}&type=${encodeURIComponent(vid.type ?? 'output')}`;
+  console.log(`[${tag}] step ${stepIndex}: video ready — ${vid.filename}`);
+
+  emit(res, 'video', { step: stepIndex, url: videoUrl });
+  stepData.outputVideoUrl = videoUrl;
+  db.saveSession(session);
+
+  return { accepted: true, outputVideoUrl: videoUrl };
+}
+
 // ── Pipeline execution ────────────────────────────────────────────────────────────
 
 async function runPipeline(session, pipelineDef, cfg, res) {
@@ -246,12 +298,27 @@ async function runPipeline(session, pipelineDef, cfg, res) {
 
     for (let si = 0; si < pipelineDef.length; si++) {
       currentStep = si;
-      const { accepted, outputImageUrl } = await runStep(pipelineDef[si], si, session, { ...ctx }, cfg, res, () => killed);
+      const stepDef = pipelineDef[si];
+
+      let result;
+      if (stepDef.type === 'video') {
+        result = await runVideoStep(stepDef, si, session, { ...ctx }, cfg, res, () => killed);
+      } else if (stepDef.type === 'generate') {
+        result = await runGenerateStep(stepDef, si, session, { ...ctx }, cfg, res, () => killed);
+      } else {
+        result = await runUpscaleStep(stepDef, si, session, { ...ctx }, cfg, res, () => killed);
+      }
+
+      const { accepted, outputImageUrl, outputVideoUrl } = result;
       overallAccepted = accepted;
+
       if (outputImageUrl) {
         ctx.inputImage = outputImageUrl;
         emit(res, 'step_complete', { step: si, imageUrl: outputImageUrl, accepted });
+      } else if (outputVideoUrl) {
+        emit(res, 'step_complete', { step: si, videoUrl: outputVideoUrl, accepted });
       }
+
       // Don't run subsequent steps on a rejected output
       if (!accepted && si < pipelineDef.length - 1) break;
     }
@@ -262,6 +329,7 @@ async function runPipeline(session, pipelineDef, cfg, res) {
     emit(res, 'done', {
       accepted:   overallAccepted,
       imageUrl:   lastStep?.outputImageUrl ?? null,
+      videoUrl:   lastStep?.outputVideoUrl ?? null,
       sessionId:  session.id,
       prompt:     session.prompt,
       iterations: session.steps.reduce((sum, st) => sum + st.iterations.length, 0),
