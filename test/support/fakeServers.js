@@ -144,6 +144,67 @@ function makeFakeComfyUI() {
   return httpServer;
 }
 
+function makeVideoFakeComfyUI() {
+  const promptId = 'test-video-prompt-001';
+  const uploads  = [];
+  const prompts  = [];
+
+  const httpServer = http.createServer((req, res) => {
+    if (req.method === 'POST' && req.url === '/prompt') {
+      let body = '';
+      req.on('data', c => (body += c));
+      req.on('end', () => {
+        prompts.push(JSON.parse(body));
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ prompt_id: promptId }));
+      });
+      return;
+    }
+    if (req.method === 'POST' && req.url === '/upload/image') {
+      req.on('data', () => {});
+      req.on('end', () => {
+        uploads.push({ filename: 'uploaded.png' });
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ name: 'uploaded.png', subfolder: '', type: 'input' }));
+      });
+      return;
+    }
+    if (req.url.startsWith('/history/')) {
+      const pid = req.url.split('/').pop();
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({
+        [pid]: { outputs: { '9': { gifs: [{ filename: 'fake_video.mp4', subfolder: '', type: 'output', format: 'video/h264-mp4' }] } } },
+      }));
+      return;
+    }
+    if (req.url.startsWith('/view')) {
+      res.writeHead(200, { 'Content-Type': 'video/mp4' });
+      res.end(Buffer.from('fakemp4'));
+      return;
+    }
+    if (req.url.startsWith('/object_info/')) {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({}));
+      return;
+    }
+    res.writeHead(404); res.end();
+  });
+
+  httpServer.uploads = uploads;
+  httpServer.prompts = prompts;
+
+  const wss = new WebSocketServer({ server: httpServer });
+  wss.on('connection', ws => {
+    setImmediate(() => {
+      ws.send(JSON.stringify({ type: 'progress', data: { prompt_id: promptId, value: 5,  max: 10 } }));
+      ws.send(JSON.stringify({ type: 'progress', data: { prompt_id: promptId, value: 10, max: 10 } }));
+      ws.send(JSON.stringify({ type: 'executing', data: { prompt_id: promptId, node: null } }));
+    });
+  });
+
+  return httpServer;
+}
+
 // Sends a POST SSE request, collects all events until stream closes.
 async function collectSSE(url, body) {
   const res = await fetch(url, {
@@ -175,4 +236,4 @@ async function collectSSE(url, body) {
   return events;
 }
 
-module.exports = { TINY_PNG, makeFakeOllama, makeFakeComfyUI, collectSSE };
+module.exports = { TINY_PNG, makeFakeOllama, makeFakeComfyUI, makeVideoFakeComfyUI, collectSSE };
