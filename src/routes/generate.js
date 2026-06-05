@@ -398,6 +398,7 @@ function buildSessionSteps(pipelineDef, cfg) {
     modelId:        stepDef.modelId ?? null,
     iterations:     [],
     outputImageUrl: null,
+    outputVideoUrl: null,
   }));
 }
 

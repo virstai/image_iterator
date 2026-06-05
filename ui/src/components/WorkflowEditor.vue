@@ -19,10 +19,11 @@
         <label>Model
           <select v-model="step.modelId">
             <option value="">— select model —</option>
-            <option v-for="(m, id) in config.models" :key="id" :value="id"
-              v-if="!archMeta[m.architecture]?.videoArch">
-              {{ m.label || id }} ({{ m.architecture || '?' }})
-            </option>
+            <template v-for="(m, id) in config.models" :key="id">
+              <option v-if="!archMeta[m.architecture]?.videoArch" :value="id">
+                {{ m.label || id }} ({{ m.architecture || '?' }})
+              </option>
+            </template>
           </select>
         </label>
 
@@ -122,10 +123,11 @@
           <label>Model <span class="hint">(checkpoint used for re-diffusion)</span>
             <select v-model="step.modelId">
               <option value="">— select model —</option>
-              <option v-for="(m, id) in config.models" :key="id" :value="id"
-                v-if="!archMeta[m.architecture]?.videoArch">
-                {{ m.label || id }} ({{ m.architecture || '?' }})
-              </option>
+              <template v-for="(m, id) in config.models" :key="id">
+                <option v-if="!archMeta[m.architecture]?.videoArch" :value="id">
+                  {{ m.label || id }} ({{ m.architecture || '?' }})
+                </option>
+              </template>
             </select>
           </label>
           <div class="row">
