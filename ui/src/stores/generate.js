@@ -41,7 +41,7 @@ function blankIteration(n) {
 }
 
 function blankStep(index) {
-  return { index, type: '', label: '', iterations: [], outputImageUrl: null, status: '' };
+  return { index, type: '', label: '', iterations: [], outputImageUrl: null, videoUrl: null, progress: 0, status: '' };
 }
 
 function ensureStep(index) {
@@ -121,10 +121,17 @@ export function handleEvent(event, data) {
     }
 
     case 'progress': {
-      const it = ensureIteration(si, data.iteration);
-      it.progress = data.pct;
-      it.status   = `Generating… ${data.pct}%`;
-      if (data.step === genState.activeStepIndex) genState.activeStepPct = data.pct;
+      const step = ensureStep(si);
+      if (step.type === 'video') {
+        step.progress = data.pct;
+        step.status   = `Generating… ${data.pct}%`;
+        if (si === genState.activeStepIndex) genState.activeStepPct = data.pct;
+      } else {
+        const it = ensureIteration(si, data.iteration);
+        it.progress = data.pct;
+        it.status   = `Generating… ${data.pct}%`;
+        if (data.step === genState.activeStepIndex) genState.activeStepPct = data.pct;
+      }
       break;
     }
 
@@ -140,9 +147,19 @@ export function handleEvent(event, data) {
       break;
     }
 
+    case 'video': {
+      const step  = ensureStep(si);
+      step.videoUrl = data.url;
+      step.status   = 'Done';
+      step.progress = 100;
+      if (si === genState.activeStepIndex) genState.activeStepPct = 100;
+      break;
+    }
+
     case 'step_complete': {
       const step = ensureStep(si);
-      step.outputImageUrl = data.imageUrl;
+      if (data.imageUrl) step.outputImageUrl = data.imageUrl;
+      if (data.videoUrl) step.videoUrl       = data.videoUrl;
       break;
     }
 
@@ -323,8 +340,12 @@ export async function loadSession(sessionId) {
   for (let si = 0; si < (session.steps ?? []).length; si++) {
     const step = session.steps[si];
     handleEvent('step', { index: si, type: step.type, label: step.label, total: session.steps.length });
-    for (let i = 0; i < step.iterations.length; i++) {
-      handleEvent('history', { step: si, ...step.iterations[i], iteration: i + 1 });
+    if (step.type === 'video') {
+      if (step.outputVideoUrl) handleEvent('video', { step: si, url: step.outputVideoUrl });
+    } else {
+      for (let i = 0; i < step.iterations.length; i++) {
+        handleEvent('history', { step: si, ...step.iterations[i], iteration: i + 1 });
+      }
     }
   }
 
