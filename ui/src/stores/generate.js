@@ -6,7 +6,8 @@ export const genState = reactive({
   iterBadge:  '',
   sessionId:  null,
   loadedDesc: null,
-  loadedRefs: null,
+  prompt:     '',
+  references: [],
   running:         false,
   activeStepIndex: null,
   totalSteps:      0,
@@ -316,7 +317,8 @@ export async function loadSession(sessionId) {
   const session = await api('GET', `/api/generate/sessions/${sessionId}`);
   genState.sessionId  = session.id;
   genState.loadedDesc = session.prompt;
-  genState.loadedRefs = session.references?.length ? session.references : null;
+  genState.prompt     = session.prompt ?? '';
+  genState.references = session.references?.length ? [...session.references] : [];
 
   for (let si = 0; si < (session.steps ?? []).length; si++) {
     const step = session.steps[si];
@@ -361,7 +363,8 @@ export async function killGeneration() {
 export function clearSession() {
   genState.sessionId  = null;
   genState.loadedDesc = null;
-  genState.loadedRefs = null;
+  genState.prompt     = '';
+  genState.references = [];
   genState.steps      = [];
   genState.status     = '';
   genState.iterBadge  = '';

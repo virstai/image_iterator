@@ -1,14 +1,13 @@
 <template>
   <div id="run-section" style="display:flex;flex-direction:column;flex:1;min-height:0;overflow:hidden">
-    <!-- Status bar -->
-    <div id="status-bar">
-      <span id="status-text">{{ status }}</span>
-      <span v-if="iterBadge" id="iteration-badge">{{ iterBadge }}</span>
-    </div>
-
     <div class="pipeline-area">
       <!-- Left: step grids -->
       <div class="pipeline-grids">
+        <!-- Status box -->
+        <div v-if="status" id="status-bar">
+          <span id="status-text">{{ status }}</span>
+          <span v-if="iterBadge" id="iteration-badge">{{ iterBadge }}</span>
+        </div>
         <div
           v-for="step in steps"
           :key="step.index"

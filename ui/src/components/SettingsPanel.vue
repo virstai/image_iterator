@@ -1,5 +1,5 @@
 <template>
-  <div style="flex:1;overflow-y:auto;padding:20px 24px;max-width:600px">
+  <div style="flex:1;overflow-y:auto;padding:20px 24px">
     <div class="panel-header">
       <h2>Global Settings</h2>
     </div>

@@ -25,23 +25,23 @@
 
     <!-- Right: editor -->
     <div class="two-pane-detail">
-      <template v-if="selectedId !== null">
-        <div class="editor-header">
+      <div class="editor-header">
+        <template v-if="selectedId !== null">
           <span class="editor-header-name">{{ isAdding ? 'New model' : (config.models[selectedId]?.label || selectedId) }}</span>
           <button v-if="!isAdding" class="danger small" @click="del" :disabled="saving">Delete</button>
-        </div>
-        <div class="two-pane-detail-body">
-          <ModelEditor
-            :key="selectedId"
-            :model-id="isAdding ? null : selectedId"
-            :model="isAdding ? null : config.models[selectedId]"
-            :arch-meta="archMeta"
-            :assets="assets"
-            @saved="onSaved"
-            @deleted="onDeleted"
-          />
-        </div>
-      </template>
+        </template>
+      </div>
+      <div v-if="selectedId !== null" class="two-pane-detail-body">
+        <ModelEditor
+          :key="selectedId"
+          :model-id="isAdding ? null : selectedId"
+          :model="isAdding ? null : config.models[selectedId]"
+          :arch-meta="archMeta"
+          :assets="assets"
+          @saved="onSaved"
+          @deleted="onDeleted"
+        />
+      </div>
       <div v-else class="two-pane-placeholder">Select a model to edit</div>
     </div>
   </div>

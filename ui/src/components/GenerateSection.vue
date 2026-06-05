@@ -6,7 +6,7 @@
     @drop.prevent="e => { dragging = false; uploadFiles(e.dataTransfer.files); }"
   >
     <textarea
-      v-model="description"
+      v-model="genState.prompt"
       placeholder="Describe the image you want…"
       rows="3"
     ></textarea>
@@ -15,7 +15,7 @@
       <!-- Inline reference strip -->
       <div class="prompt-bar-refs">
         <div
-          v-for="(ref, i) in references"
+          v-for="(ref, i) in genState.references"
           :key="ref.filename + i"
           class="prompt-bar-ref-thumb"
         >
@@ -66,26 +66,21 @@
 </template>
 
 <script setup>
-import { ref, watch } from 'vue';
+import { ref } from 'vue';
+import { genState } from '../stores/generate.js';
 
 const props = defineProps({
   running:    { type: Boolean, default: false },
   sessionId:  { type: String,  default: null },
   loadedDesc: { type: String,  default: null },
-  loadedRefs: { type: Array,   default: null },
   config:     { type: Object,  default: () => ({}) },
 });
 
 const emit = defineEmits(['generate', 'continue', 'clear', 'open-workflows', 'open-settings']);
 
-const description = ref('');
-const references  = ref([]);
-const dragging    = ref(false);
-const uploading   = ref(false);
-const fileInput   = ref(null);
-
-watch(() => props.loadedDesc, val => { if (val) description.value = val; });
-watch(() => props.loadedRefs, refs => { if (refs) references.value = [...refs]; });
+const dragging  = ref(false);
+const uploading = ref(false);
+const fileInput = ref(null);
 
 function refUrl(ref) {
   return `/api/image?filename=${encodeURIComponent(ref.filename)}&subfolder=${encodeURIComponent(ref.subfolder ?? '')}&type=${encodeURIComponent(ref.type ?? 'input')}`;
@@ -106,7 +101,7 @@ async function uploadFiles(files) {
       body: JSON.stringify({ files: encoded }),
     });
     if (!res.ok) throw new Error(`Upload failed: ${res.statusText}`);
-    references.value.push(...await res.json());
+    genState.references.push(...await res.json());
   } catch (err) {
     alert(`Reference upload failed: ${err.message}`);
   } finally {
@@ -116,19 +111,17 @@ async function uploadFiles(files) {
 }
 
 function onFileInput(e) { uploadFiles(e.target.files); e.target.value = ''; }
-function removeRef(i)   { references.value.splice(i, 1); }
+function removeRef(i)   { genState.references.splice(i, 1); }
 
 function generate() {
-  const desc = description.value.trim();
+  const desc = genState.prompt.trim();
   if (!desc) return alert('Enter a description first.');
   if (!props.config.activeWorkflow) { emit('open-workflows'); return alert('Select an active workflow first.'); }
   if (!props.config.llmModel)       { emit('open-settings');  return alert('Set an LLM model in Settings first.'); }
-  emit('generate', desc, references.value);
+  emit('generate', desc, genState.references);
 }
 
 function clearAndReset() {
-  description.value = '';
-  references.value  = [];
   emit('clear');
 }
 

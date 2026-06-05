@@ -20,7 +20,6 @@
           :running="genState.running"
           :session-id="genState.sessionId"
           :loaded-desc="genState.loadedDesc"
-          :loaded-refs="genState.loadedRefs"
           :config="configState.config"
           @generate="onGenerate"
           @continue="onContinue"

@@ -26,8 +26,8 @@
 
     <!-- Right: editor -->
     <div class="two-pane-detail">
-      <template v-if="selectedId !== null">
-        <div class="editor-header">
+      <div class="editor-header">
+        <template v-if="selectedId !== null">
           <span class="editor-header-name">{{ isAdding ? 'New workflow' : (config.workflows[selectedId]?.label || selectedId) }}</span>
           <button
             v-if="!isAdding && selectedId !== config.activeWorkflow"
@@ -40,20 +40,20 @@
           >● Active</span>
           <button v-if="!isAdding" class="secondary small" @click="duplicate" :disabled="saving">Duplicate</button>
           <button v-if="!isAdding" class="danger small" @click="del" :disabled="saving">Delete</button>
-        </div>
-        <div class="two-pane-detail-body">
-          <WorkflowEditor
-            :key="selectedId"
-            :workflow-id="isAdding ? null : selectedId"
-            :workflow="isAdding ? null : config.workflows[selectedId]"
-            :config="config"
-            :arch-meta="archMeta"
-            :assets="assets"
-            @saved="onSaved"
-            @deleted="onDeleted"
-          />
-        </div>
-      </template>
+        </template>
+      </div>
+      <div v-if="selectedId !== null" class="two-pane-detail-body">
+        <WorkflowEditor
+          :key="selectedId"
+          :workflow-id="isAdding ? null : selectedId"
+          :workflow="isAdding ? null : config.workflows[selectedId]"
+          :config="config"
+          :arch-meta="archMeta"
+          :assets="assets"
+          @saved="onSaved"
+          @deleted="onDeleted"
+        />
+      </div>
       <div v-else class="two-pane-placeholder">Select a workflow to edit</div>
     </div>
   </div>
