@@ -61,7 +61,7 @@ const ARCH_META = {
       unetName:  'High-noise expert — e.g. wan2.2_i2v_high_noise_14B_fp8_scaled.safetensors',
       unetName2: 'Low-noise expert — e.g. wan2.2_i2v_low_noise_14B_fp8_scaled.safetensors (leave blank for 5B TI2V)',
     },
-    notes:       'Requires ComfyUI-WanVideoWrapper on the ComfyUI server — install before use. Primary mode is image-to-video (I2V): animates the output from a previous step. 14B: set both UNet fields. 5B TI2V: first UNet only.',
+    notes:       'Requires kijai/ComfyUI-WanVideoWrapper on the ComfyUI server — install before use. Primary mode is image-to-video (I2V). 14B MoE: set both UNet fields (two-sampler cascade). 5B TI2V: first UNet field only.',
   },
   hunyuanvideo: {
     label:       'HunyuanVideo',
