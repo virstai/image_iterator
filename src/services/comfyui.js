@@ -29,7 +29,21 @@ async function queuePrompt(workflow, clientId) {
 function waitForCompletion(promptId, clientId, onProgress, onPreview) {
   return new Promise((resolve, reject) => {
     const ws = new WebSocket(`${wsUrl()}/ws?clientId=${clientId}`);
-    const timeout = setTimeout(() => { ws.close(); reject(new Error('ComfyUI timed out after 5 minutes')); }, 5 * 60 * 1000);
+    let done = false;
+
+    const finish = (err) => {
+      if (done) return;
+      done = true;
+      clearTimeout(timeout);
+      ws.close();
+      if (err) reject(err);
+      else resolve();
+    };
+
+    const timeout = setTimeout(
+      () => finish(new Error('ComfyUI timed out after 5 minutes')),
+      5 * 60 * 1000,
+    );
 
     ws.on('message', (raw, isBinary) => {
       // Binary frame: 4-byte big-endian event type + image data (JPEG preview from ComfyUI)
@@ -51,19 +65,28 @@ function waitForCompletion(promptId, clientId, onProgress, onPreview) {
           onProgress?.(Math.round((msg.data.value / msg.data.max) * 100));
         }
         if (msg.type === 'executing' && msg.data?.prompt_id === promptId && msg.data.node === null) {
-          clearTimeout(timeout); ws.close(); resolve();
+          finish();
         }
-        // ComfyUI sends this when a prompt is interrupted via POST /interrupt.
+        // Interrupted via POST /interrupt — treat as clean stop, not an error.
         // Accept even when prompt_id is absent (older ComfyUI versions omit it).
-        if (msg.type === 'execution_interrupted' || msg.type === 'execution_error') {
+        if (msg.type === 'execution_interrupted') {
+          if (!msg.data?.prompt_id || msg.data.prompt_id === promptId) finish();
+        }
+        // ComfyUI execution error (e.g. OOM, missing model) — reject so the
+        // pipeline surfaces the actual error rather than hanging or returning no images.
+        if (msg.type === 'execution_error') {
           if (!msg.data?.prompt_id || msg.data.prompt_id === promptId) {
-            clearTimeout(timeout); ws.close(); resolve();
+            const detail = msg.data?.exception_message || msg.data?.error || 'execution error';
+            finish(new Error(`ComfyUI: ${detail}`));
           }
         }
-      } catch { /* ignore */ }
+      } catch { /* ignore parse errors */ }
     });
 
-    ws.on('error', (err) => { clearTimeout(timeout); reject(new Error(`ComfyUI WS error: ${err.message}`)); });
+    ws.on('error', (err) => finish(new Error(`ComfyUI WS error: ${err.message}`)));
+    // If the socket closes before we get a completion message (e.g. ComfyUI crashes / OOM
+    // kills the process), reject immediately rather than waiting for the 5-minute timeout.
+    ws.on('close', () => finish(new Error('ComfyUI WebSocket closed unexpectedly')));
   });
 }
 
