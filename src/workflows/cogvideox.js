@@ -69,12 +69,12 @@ function build(params) {
       inputs: { vae: ["1", 1], samples: ["7", 0] },
     };
     nodes["9"] = {
-      class_type: "VHS_VideoCombine",
-      inputs: {
-        images: ["8", 0], frame_rate: fps, loop_count: 0,
-        filename_prefix: "iterator_video", format: "video/h264-mp4",
-        pingpong: false, save_output: true,
-      },
+      class_type: "CreateVideo",
+      inputs: { images: ["8", 0], fps },
+    };
+    nodes["10"] = {
+      class_type: "SaveVideo",
+      inputs: { video: ["9", 0], filename_prefix: "iterator_video", format: "auto", codec: "auto" },
     };
   } else {
     nodes["5"] = {
@@ -86,12 +86,12 @@ function build(params) {
       inputs: { vae: ["1", 1], samples: ["5", 0] },
     };
     nodes["7"] = {
-      class_type: "VHS_VideoCombine",
-      inputs: {
-        images: ["6", 0], frame_rate: fps, loop_count: 0,
-        filename_prefix: "iterator_video", format: "video/h264-mp4",
-        pingpong: false, save_output: true,
-      },
+      class_type: "CreateVideo",
+      inputs: { images: ["6", 0], fps },
+    };
+    nodes["8"] = {
+      class_type: "SaveVideo",
+      inputs: { video: ["7", 0], filename_prefix: "iterator_video", format: "auto", codec: "auto" },
     };
   }
 

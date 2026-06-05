@@ -192,18 +192,16 @@ function build(params) {
   };
 
   // ── Output ────────────────────────────────────────────────────────────────────
-  const combineId = id();
-  nodes[combineId] = {
-    class_type: 'VHS_VideoCombine',
-    inputs: {
-      images:          [decodeId, 0],
-      frame_rate:      fps,
-      loop_count:      0,
-      filename_prefix: 'iterator_video',
-      format:          'video/h264-mp4',
-      pingpong:        false,
-      save_output:     true,
-    },
+  const createVideoId = id();
+  nodes[createVideoId] = {
+    class_type: 'CreateVideo',
+    inputs: { images: [decodeId, 0], fps },
+  };
+
+  const saveVideoId = id();
+  nodes[saveVideoId] = {
+    class_type: 'SaveVideo',
+    inputs: { video: [createVideoId, 0], filename_prefix: 'iterator_video', format: 'auto', codec: 'auto' },
   };
 
   return nodes;

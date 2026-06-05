@@ -22,7 +22,8 @@ test('ltxvideo T2V: contains required node types', () => {
   assert.ok(types.includes('EmptyLTXVLatentVideo'), 'EmptyLTXVLatentVideo');
   assert.ok(types.includes('LTXVSampler'),          'LTXVSampler');
   assert.ok(types.includes('VAEDecode'),            'VAEDecode');
-  assert.ok(types.includes('VHS_VideoCombine'),     'VHS_VideoCombine');
+  assert.ok(types.includes('CreateVideo'),          'CreateVideo');
+  assert.ok(types.includes('SaveVideo'),            'SaveVideo');
 });
 
 test('ltxvideo T2V: no LoadImage', () => {
@@ -44,8 +45,8 @@ test('ltxvideo T2V: default dimensions applied', () => {
   assert.equal(latent.inputs.length, defaults.frames);
 });
 
-test('ltxvideo T2V: VHS_VideoCombine uses fps', () => {
+test('ltxvideo T2V: CreateVideo uses fps', () => {
   const wf = build({ ...BASE, fps: 30 });
-  const vhs = Object.values(wf).find(n => n.class_type === 'VHS_VideoCombine');
-  assert.equal(vhs.inputs.frame_rate, 30);
+  const cv = Object.values(wf).find(n => n.class_type === 'CreateVideo');
+  assert.equal(cv.inputs.fps, 30);
 });

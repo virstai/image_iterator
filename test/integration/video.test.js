@@ -133,7 +133,7 @@ test('video-only workflow: session has outputVideoUrl and empty iterations', asy
   assert.equal(session.status, 'complete',                  'session complete');
 });
 
-test('video workflow: submits exactly one ComfyUI prompt containing VHS_VideoCombine', async () => {
+test('video workflow: submits exactly one ComfyUI prompt with CreateVideo + SaveVideo output', async () => {
   const promptsBefore = comfyServer.prompts.length;
   await collectSSE(`${base()}/api/generate`, { prompt: 'a lake' });
 
@@ -142,7 +142,11 @@ test('video workflow: submits exactly one ComfyUI prompt containing VHS_VideoCom
 
   const wfNodes = Object.values(submitted[0].prompt);
   assert.ok(
-    wfNodes.some(n => n.class_type === 'VHS_VideoCombine'),
-    'submitted workflow has VHS_VideoCombine',
+    wfNodes.some(n => n.class_type === 'CreateVideo'),
+    'submitted workflow has CreateVideo',
+  );
+  assert.ok(
+    wfNodes.some(n => n.class_type === 'SaveVideo'),
+    'submitted workflow has SaveVideo',
   );
 });

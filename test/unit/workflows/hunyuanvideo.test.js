@@ -22,7 +22,8 @@ test('hunyuanvideo T2V: contains required node types', () => {
   assert.ok(types.includes('EmptyHunyuanLatentVideo'),  'EmptyHunyuanLatentVideo');
   assert.ok(types.includes('KSampler'),                 'KSampler');
   assert.ok(types.includes('VAEDecode'),                'VAEDecode');
-  assert.ok(types.includes('VHS_VideoCombine'),         'VHS_VideoCombine');
+  assert.ok(types.includes('CreateVideo'),              'CreateVideo');
+  assert.ok(types.includes('SaveVideo'),                'SaveVideo');
 });
 
 test('hunyuanvideo T2V: no LoadImage in T2V mode', () => {
@@ -44,9 +45,10 @@ test('hunyuanvideo T2V: applies default dimensions', () => {
   assert.equal(latent.inputs.video_length, defaults.frames);
 });
 
-test('hunyuanvideo T2V: VHS_VideoCombine uses fps and mp4 format', () => {
+test('hunyuanvideo T2V: CreateVideo uses fps and SaveVideo is present', () => {
   const wf = build({ ...BASE, fps: 30 });
-  const vhs = Object.values(wf).find(n => n.class_type === 'VHS_VideoCombine');
-  assert.equal(vhs.inputs.frame_rate, 30);
-  assert.ok(vhs.inputs.format.includes('mp4'));
+  const cv = Object.values(wf).find(n => n.class_type === 'CreateVideo');
+  const sv = Object.values(wf).find(n => n.class_type === 'SaveVideo');
+  assert.equal(cv.inputs.fps, 30);
+  assert.ok(sv, 'SaveVideo present');
 });

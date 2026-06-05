@@ -26,7 +26,8 @@ test('wanvideo: contains all required wrapper node types', () => {
   assert.ok(types.includes('WanVideoTextEncode'),         'WanVideoTextEncode');
   assert.ok(types.includes('WanVideoSampler'),            'WanVideoSampler');
   assert.ok(types.includes('WanVideoDecode'),             'WanVideoDecode');
-  assert.ok(types.includes('VHS_VideoCombine'),           'VHS_VideoCombine');
+  assert.ok(types.includes('CreateVideo'),                'CreateVideo');
+  assert.ok(types.includes('SaveVideo'),                  'SaveVideo');
 });
 
 test('wanvideo: no LoadImage without inputRef', () => {
@@ -68,11 +69,12 @@ test('wanvideo: WanVideoSampler applies cfg and steps overrides', () => {
   assert.equal(sampler.inputs.cfg,   4.5);
 });
 
-test('wanvideo: VHS_VideoCombine uses fps and mp4 format', () => {
+test('wanvideo: CreateVideo uses fps and SaveVideo is present', () => {
   const wf = build({ ...BASE, fps: 24 });
-  const vhs = Object.values(wf).find(n => n.class_type === 'VHS_VideoCombine');
-  assert.equal(vhs.inputs.frame_rate, 24);
-  assert.ok(vhs.inputs.format.includes('mp4'), 'MP4 format');
+  const cv = Object.values(wf).find(n => n.class_type === 'CreateVideo');
+  const sv = Object.values(wf).find(n => n.class_type === 'SaveVideo');
+  assert.equal(cv.inputs.fps, 24, 'fps passed to CreateVideo');
+  assert.ok(sv, 'SaveVideo present');
 });
 
 test('wanvideo MoE: two WanVideoModelLoaders and two WanVideoSamplers', () => {
