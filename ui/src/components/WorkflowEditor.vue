@@ -10,16 +10,17 @@
     <!-- Steps -->
     <div v-for="(step, si) in form.steps" :key="si" class="step-block">
       <div class="step-header">
-        <strong>Step {{ si + 1 }}: {{ step.type === 'upscale' ? 'Upscale' : 'Generate' }}</strong>
+        <strong>Step {{ si + 1 }}: {{ step.type === 'upscale' ? 'Upscale' : step.type === 'video' ? 'Video' : 'Generate' }}</strong>
         <button v-if="form.steps.length > 1" class="small danger" @click="removeStep(si)">Remove</button>
       </div>
 
       <!-- ── Generate step ──────────────────────────────────────────────── -->
-      <template v-if="step.type !== 'upscale'">
+      <template v-if="step.type !== 'upscale' && step.type !== 'video'">
         <label>Model
           <select v-model="step.modelId">
             <option value="">— select model —</option>
-            <option v-for="(m, id) in config.models" :key="id" :value="id">
+            <option v-for="(m, id) in config.models" :key="id" :value="id"
+              v-if="!archMeta[m.architecture]?.videoArch">
               {{ m.label || id }} ({{ m.architecture || '?' }})
             </option>
           </select>
@@ -88,7 +89,7 @@
       </template>
 
       <!-- ── Upscale step ───────────────────────────────────────────────── -->
-      <template v-else>
+      <template v-else-if="step.type === 'upscale'">
         <label>Upscale type
           <select v-model="step.upscaleType">
             <option value="model">Model upscaler (ESRGAN / RealESRGAN)</option>
@@ -121,7 +122,8 @@
           <label>Model <span class="hint">(checkpoint used for re-diffusion)</span>
             <select v-model="step.modelId">
               <option value="">— select model —</option>
-              <option v-for="(m, id) in config.models" :key="id" :value="id">
+              <option v-for="(m, id) in config.models" :key="id" :value="id"
+                v-if="!archMeta[m.architecture]?.videoArch">
                 {{ m.label || id }} ({{ m.architecture || '?' }})
               </option>
             </select>
@@ -163,8 +165,33 @@
         </template>
       </template>
 
-      <!-- ── Review (all step types) ───────────────────────────────────── -->
-      <div class="review-block">
+      <!-- ── Video step ────────────────────────────────────────────────── -->
+      <template v-else-if="step.type === 'video'">
+        <label>Video model
+          <select v-model="step.modelId">
+            <option value="">— select video model —</option>
+            <option v-for="m in videoModels" :key="m.id" :value="m.id">{{ m.label }}</option>
+          </select>
+          <span v-if="!videoModels.length" class="hint">No video models found. Add one in the Models panel.</span>
+        </label>
+        <div class="row">
+          <label>Width  <input type="number" v-model.number="step.width"  step="16" placeholder="832"></label>
+          <label>Height <input type="number" v-model.number="step.height" step="16" placeholder="480"></label>
+          <label>Frames <input type="number" v-model.number="step.frames" step="1"  placeholder="49"></label>
+          <label>FPS    <input type="number" v-model.number="step.fps"    step="1"  placeholder="16"></label>
+        </div>
+        <div class="row">
+          <label>Steps    <input type="number" v-model.number="step.steps"    min="1"   placeholder="30"></label>
+          <label>Guidance <input type="number" v-model.number="step.guidance" step="0.5" placeholder="6"></label>
+        </div>
+        <p class="hint">
+          Video step is always terminal — generates once with no review or iteration.
+          Input: previous step's accepted image → first reference → text-to-video.
+        </p>
+      </template>
+
+      <!-- ── Review (generate and upscale steps only) ─────────────────── -->
+      <div v-if="step.type !== 'video'" class="review-block">
         <strong>Review</strong>
         <div class="row">
           <label>Max iterations
@@ -183,6 +210,9 @@
     <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
       <button class="secondary" @click="addGenerateStep">+ Add generate step</button>
       <button class="secondary" @click="addUpscaleStep">+ Add upscale step</button>
+      <button class="secondary" :disabled="hasVideoStep" @click="addVideoStep">
+        + Add video step{{ hasVideoStep ? ' (already added)' : '' }}
+      </button>
     </div>
 
     <!-- Skill section -->
@@ -295,6 +325,13 @@ function blankUpscaleStep() {
   };
 }
 
+function blankVideoStep() {
+  return {
+    type: 'video',
+    modelId: '', width: '', height: '', frames: '', fps: '', steps: '', guidance: '', cfgScale: '',
+  };
+}
+
 function stepFromDef(s) {
   if (s.type === 'upscale') {
     return {
@@ -312,6 +349,19 @@ function stepFromDef(s) {
       maxIterations: s.review?.maxIterations ?? '',
       humanReview:   s.review?.humanReview   ?? false,
       gracePeriod:   s.review?.gracePeriod   ?? '',
+    };
+  }
+  if (s.type === 'video') {
+    return {
+      type:     'video',
+      modelId:  s.modelId              ?? '',
+      width:    s.params?.width        ?? '',
+      height:   s.params?.height       ?? '',
+      frames:   s.params?.frames       ?? '',
+      fps:      s.params?.fps          ?? '',
+      steps:    s.params?.steps        ?? '',
+      guidance: s.params?.guidance     ?? '',
+      cfgScale: s.params?.cfgScale     ?? '',
     };
   }
   return {
@@ -376,7 +426,16 @@ function showNegative(si) { return ['sd15','sdxl','sd3','anima','chroma'].includ
 
 function addGenerateStep() { form.steps.push(blankGenerateStep()); }
 function addUpscaleStep()  { form.steps.push(blankUpscaleStep()); }
+function addVideoStep()    { form.steps.push(blankVideoStep()); }
 function removeStep(si)    { form.steps.splice(si, 1); }
+
+const hasVideoStep = computed(() => form.steps.some(s => s.type === 'video'));
+
+const videoModels = computed(() =>
+  Object.entries(props.config.models ?? {})
+    .filter(([, m]) => props.archMeta[m.architecture]?.videoArch)
+    .map(([id, m]) => ({ id, label: m.label || id }))
+);
 
 const outcomeRate = computed(() => {
   const o = skillData.value?.outcomes;
@@ -442,7 +501,7 @@ async function save() {
   if (!form.label.trim()) return alert('Enter a name for this workflow.');
   if (!form.steps.length) return alert('Add at least one step.');
 
-  if (form.steps.some(s => s.type !== 'upscale' && !s.modelId)) {
+  if (form.steps.some(s => s.type === 'generate' && !s.modelId)) {
     return alert('Select a model for every generate step.');
   }
   if (form.steps.some(s => s.type === 'upscale' && s.upscaleType === 'model' && !s.upscaleModel)) {
@@ -450,6 +509,13 @@ async function save() {
   }
   if (form.steps.some(s => s.type === 'upscale' && s.upscaleType === 'hires' && !s.modelId)) {
     return alert('Select a model for every hires upscale step.');
+  }
+  if (form.steps.some(s => s.type === 'video' && !s.modelId)) {
+    return alert('Select a video model for the video step.');
+  }
+  const videoIdx = form.steps.findIndex(s => s.type === 'video');
+  if (videoIdx !== -1 && videoIdx !== form.steps.length - 1) {
+    return alert('The video step must be the last step in the workflow.');
   }
 
   const steps = form.steps.map(s => {
@@ -478,6 +544,22 @@ async function save() {
         upscaleModel: s.upscaleModel,
         factor:       s.factor ?? 4,
         review,
+      };
+    }
+
+    if (s.type === 'video') {
+      return {
+        type:    'video',
+        modelId: s.modelId,
+        params: {
+          ...(s.width    !== '' && { width:    Number(s.width) }),
+          ...(s.height   !== '' && { height:   Number(s.height) }),
+          ...(s.frames   !== '' && { frames:   Number(s.frames) }),
+          ...(s.fps      !== '' && { fps:      Number(s.fps) }),
+          ...(s.steps    !== '' && { steps:    Number(s.steps) }),
+          ...(s.guidance !== '' && { guidance: Number(s.guidance) }),
+          ...(s.cfgScale !== '' && { cfgScale: Number(s.cfgScale) }),
+        },
       };
     }
 
