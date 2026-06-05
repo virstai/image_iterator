@@ -1,13 +1,17 @@
 'use strict';
 
 const profiles = {
-  sd15:   require('./sd15'),
-  sdxl:   require('./sdxl'),
-  flux:   require('./flux'),
-  flux2:  require('./flux2'),
-  sd3:    require('./sd3'),
-  chroma: require('./chroma'),
-  anima:  require('./anima'),
+  sd15:         require('./sd15'),
+  sdxl:         require('./sdxl'),
+  flux:         require('./flux'),
+  flux2:        require('./flux2'),
+  sd3:          require('./sd3'),
+  chroma:       require('./chroma'),
+  anima:        require('./anima'),
+  wanvideo:     require('./wanvideo'),
+  hunyuanvideo: require('./hunyuanvideo'),
+  ltxvideo:     require('./ltxvideo'),
+  cogvideox:    require('./cogvideox'),
 };
 
 const ARCH_META = {
@@ -47,6 +51,30 @@ const ARCH_META = {
     loadingMode: 'split',
     fields:      { unetName: true, clipL: true, vaeName: true, cfgScale: true },
     notes:       'Requires Qwen-3 text encoder (qwen_3_06b_base.safetensors) and Qwen-Image VAE. The er_sde sampler is available in recent ComfyUI builds or via the RES4LYF custom node pack.',
+  },
+  wanvideo: {
+    label:       'WanVideo (Wan 2.1)',
+    loadingMode: 'split',
+    videoArch:   true,
+    fields:      { unetName: true, clipName: true, vaeName: true, guidance: true },
+  },
+  hunyuanvideo: {
+    label:       'HunyuanVideo',
+    loadingMode: 'split',
+    videoArch:   true,
+    fields:      { unetName: true, clipName: true, vaeName: true, guidance: true },
+  },
+  ltxvideo: {
+    label:       'LTX-Video',
+    loadingMode: 'split',
+    videoArch:   true,
+    fields:      { unetName: true, clipName: true, vaeName: true, guidance: true },
+  },
+  cogvideox: {
+    label:       'CogVideoX',
+    loadingMode: 'checkpoint',
+    videoArch:   true,
+    fields:      { checkpoint: true, vae: true, clipName: true, cfgScale: true },
   },
 };
 
