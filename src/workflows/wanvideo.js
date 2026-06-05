@@ -15,7 +15,7 @@ const defaults = {
 
 function build(params) {
   const {
-    unetName, vaeName, clipName,
+    unetName, unetName2, vaeName, clipName,
     positivePrompt = '',
     width     = defaults.width,
     height    = defaults.height,
@@ -34,11 +34,13 @@ function build(params) {
     ? (inputRef.subfolder ? `${inputRef.subfolder}/${inputRef.filename}` : inputRef.filename)
     : null;
 
+  // Wan 2.2 14B uses a dual-UNet MoE loader; 5B single-UNet uses the standard loader.
+  const loaderNode = unetName2
+    ? { class_type: "WanVideoMoEModelLoader", inputs: { high_noise_model: unetName, low_noise_model: unetName2, vae: vaeName, precision: "bf16", fp8_unet: false, load_device: "cpu" } }
+    : { class_type: "WanVideoModelLoader",    inputs: { model: unetName, vae: vaeName, precision: "bf16", fp8_unet: false, load_device: "cpu" } };
+
   const nodes = {
-    "1": {
-      class_type: "WanVideoModelLoader",
-      inputs: { model: unetName, vae: vaeName, precision: "bf16", fp8_unet: false, load_device: "cpu" },
-    },
+    "1": loaderNode,
     "2": {
       class_type: "CLIPLoader",
       inputs: { clip_name: clipName, type: "wan" },

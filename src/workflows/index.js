@@ -56,8 +56,8 @@ const ARCH_META = {
     label:       'WanVideo (Wan 2.2)',
     loadingMode: 'split',
     videoArch:   true,
-    fields:      { unetName: true, clipName: true, vaeName: true, guidance: true },
-    notes:       'Wan 2.2 14B uses a dual-UNet MoE — two diffusion model files required (high-noise + low-noise expert). Set UNet to the high-noise expert; see the setup guide for the low-noise file. Requires ComfyUI-WanVideoWrapper or native ComfyUI nodes.',
+    fields:      { unetName: true, unetName2: true, clipName: true, vaeName: true, guidance: true },
+    notes:       'Wan 2.2 14B uses a dual-UNet MoE — set UNet to the high-noise expert and UNet 2 to the low-noise expert. Leave UNet 2 blank for the 5B single-UNet model. Requires ComfyUI-WanVideoWrapper or native ComfyUI nodes.',
   },
   hunyuanvideo: {
     label:       'HunyuanVideo',

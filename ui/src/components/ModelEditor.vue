@@ -48,10 +48,18 @@
       </label>
     </div>
 
-    <!-- UNet -->
-    <label v-if="showSplitField && hasField('unetName')">UNet file
+    <!-- UNet (primary — or high-noise expert for Wan 2.2 MoE) -->
+    <label v-if="showSplitField && hasField('unetName')">{{ hasField('unetName2') ? 'High-noise UNet file' : 'UNet file' }}
       <select v-model="form.unetName">
         <option value="">— select —</option>
+        <option v-for="u in assets.comfyui?.unets" :key="u" :value="u">{{ u }}</option>
+      </select>
+    </label>
+
+    <!-- UNet 2 (low-noise expert for Wan 2.2 MoE) -->
+    <label v-if="showSplitField && hasField('unetName2')">Low-noise UNet file <span class="hint">(optional — leave blank for single-UNet models)</span>
+      <select v-model="form.unetName2">
+        <option value="">— none —</option>
         <option v-for="u in assets.comfyui?.unets" :key="u" :value="u">{{ u }}</option>
       </select>
     </label>
@@ -168,7 +176,7 @@ const emit = defineEmits(['saved', 'deleted', 'cancel']);
 
 const form = reactive({
   label: '', architecture: '', splitLoad: false,
-  checkpoint: '', unetName: '', clipL: '', t5xxl: '', clipName: '', vaeName: '',
+  checkpoint: '', unetName: '', unetName2: '', clipL: '', t5xxl: '', clipName: '', vaeName: '',
   vae: '', useRefiner: false, refinerCheckpoint: '',
   adapterModel: '', clipVisionModel: '', adapterWeight: '',
 });
@@ -180,6 +188,7 @@ watch(() => props.model, m => {
   form.splitLoad         = !!(m.unetName || props.archMeta[m.architecture]?.loadingMode === 'split');
   form.checkpoint        = m.checkpoint        ?? '';
   form.unetName          = m.unetName          ?? '';
+  form.unetName2         = m.unetName2         ?? '';
   form.clipL             = m.clipL             ?? '';
   form.t5xxl             = m.t5xxl             ?? '';
   form.clipName          = m.clipName          ?? '';
@@ -224,6 +233,7 @@ async function save() {
     architecture:      form.architecture,
     checkpoint:        (!isSplit.value && form.checkpoint)  ? form.checkpoint  : null,
     unetName:          (isSplit.value  && form.unetName)    ? form.unetName    : null,
+    unetName2:         (isSplit.value  && form.unetName2)   ? form.unetName2   : null,
     vaeName:           (isSplit.value  && form.vaeName)     ? form.vaeName     : null,
     clipL:             (isSplit.value  && form.clipL)       ? form.clipL       : null,
     t5xxl:             (isSplit.value  && form.t5xxl)       ? form.t5xxl       : null,
