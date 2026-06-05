@@ -22,8 +22,9 @@ test('wanvideo: contains all required wrapper node types', () => {
   const types = nodeTypes(wf);
   assert.ok(types.includes('WanVideoModelLoader'),        'WanVideoModelLoader');
   assert.ok(types.includes('WanVideoVAELoader'),          'WanVideoVAELoader');
-  assert.ok(types.includes('LoadWanVideoT5TextEncoder'),  'LoadWanVideoT5TextEncoder');
-  assert.ok(types.includes('WanVideoTextEncode'),         'WanVideoTextEncode');
+  assert.ok(types.includes('CLIPLoader'),                 'CLIPLoader');
+  assert.ok(types.includes('CLIPTextEncode'),             'CLIPTextEncode');
+  assert.ok(types.includes('WanVideoTextEmbedBridge'),    'WanVideoTextEmbedBridge');
   assert.ok(types.includes('WanVideoSampler'),            'WanVideoSampler');
   assert.ok(types.includes('WanVideoDecode'),             'WanVideoDecode');
   assert.ok(types.includes('CreateVideo'),                'CreateVideo');
@@ -56,10 +57,11 @@ test('wanvideo: WanVideoModelLoader uses unetName (no vae)', () => {
   assert.equal(loader.inputs.vae, undefined, 'VAE not on model loader');
 });
 
-test('wanvideo: LoadWanVideoT5TextEncoder uses clipName', () => {
+test('wanvideo: CLIPLoader uses clipName with type wan', () => {
   const wf = build(BASE);
-  const t5 = Object.values(wf).find(n => n.class_type === 'LoadWanVideoT5TextEncoder');
-  assert.equal(t5.inputs.model_name, 'umt5.safetensors');
+  const cl = Object.values(wf).find(n => n.class_type === 'CLIPLoader');
+  assert.equal(cl.inputs.clip_name, 'umt5.safetensors');
+  assert.equal(cl.inputs.type, 'wan');
 });
 
 test('wanvideo: WanVideoSampler applies cfg and steps overrides', () => {

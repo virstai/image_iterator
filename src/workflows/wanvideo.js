@@ -84,26 +84,31 @@ function build(params) {
     inputs: { model_name: vaeName, precision: vaePrecision || 'bf16' },
   };
 
-  // ── T5 text encoder ───────────────────────────────────────────────────────────
-  const t5Id = id();
-  nodes[t5Id] = {
-    class_type: 'LoadWanVideoT5TextEncoder',
-    inputs: {
-      model_name: clipName,
-      precision:  'bf16',
-    },
+  // ── T5 encoder via native CLIPLoader (supports fp8_e4m3fn_scaled) ────────────
+  // WanVideoTextEmbedBridge bridges CLIPTextEncode CONDITIONING → WANVIDEOTEXTEMBEDS,
+  // bypassing LoadWanVideoT5TextEncoder which hard-rejects fp8_scaled files.
+  const clipLoaderId = id();
+  nodes[clipLoaderId] = {
+    class_type: 'CLIPLoader',
+    inputs: { clip_name: clipName, type: 'wan' },
   };
 
-  // ── Text encode ───────────────────────────────────────────────────────────────
+  const posEncId = id();
+  nodes[posEncId] = {
+    class_type: 'CLIPTextEncode',
+    inputs: { clip: [clipLoaderId, 0], text: positivePrompt },
+  };
+
+  const negEncId = id();
+  nodes[negEncId] = {
+    class_type: 'CLIPTextEncode',
+    inputs: { clip: [clipLoaderId, 0], text: '' },
+  };
+
   const textEncId = id();
   nodes[textEncId] = {
-    class_type: 'WanVideoTextEncode',
-    inputs: {
-      positive_prompt: positivePrompt,
-      negative_prompt: '',
-      t5:              [t5Id, 0],
-      force_offload:   true,
-    },
+    class_type: 'WanVideoTextEmbedBridge',
+    inputs: { positive: [posEncId, 0], negative: [negEncId, 0] },
   };
 
   // ── Image conditioning (I2V) ──────────────────────────────────────────────────

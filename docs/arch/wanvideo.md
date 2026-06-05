@@ -10,7 +10,7 @@ Alibaba's open-source video generation model. Wan 2.2 uses a Mixture-of-Experts 
 |---|---|---|
 | High-noise UNet | `wan2.2_t2v_high_noise_14B_fp8_scaled.safetensors` | `models/diffusion_models/` |
 | Low-noise UNet | `wan2.2_t2v_low_noise_14B_fp8_scaled.safetensors` | `models/diffusion_models/` |
-| Text encoder | `umt5_xxl_fp8_e4m3fn_scaled.safetensors` | `models/text_encoders/` |
+| Text encoder | `umt5_xxl_fp8_e4m3fn_scaled.safetensors` *(fp8_scaled and bf16 both supported)* | `models/text_encoders/` |
 | VAE | `wan_2.1_vae.safetensors` | `models/vae/` |
 
 ### Image-to-Video (I2V) — 14B
@@ -19,7 +19,7 @@ Alibaba's open-source video generation model. Wan 2.2 uses a Mixture-of-Experts 
 |---|---|---|
 | High-noise UNet | `wan2.2_i2v_high_noise_14B_fp8_scaled.safetensors` | `models/diffusion_models/` |
 | Low-noise UNet | `wan2.2_i2v_low_noise_14B_fp8_scaled.safetensors` | `models/diffusion_models/` |
-| Text encoder | `umt5_xxl_fp8_e4m3fn_scaled.safetensors` | `models/text_encoders/` |
+| Text encoder | `umt5_xxl_fp8_e4m3fn_scaled.safetensors` *(fp8_scaled and bf16 both supported)* | `models/text_encoders/` |
 | VAE | `wan_2.1_vae.safetensors` | `models/vae/` |
 | CLIP Vision *(optional)* | `sigclip_vision_patch14_384.safetensors` | `models/clip_vision/` |
 
@@ -28,7 +28,7 @@ Alibaba's open-source video generation model. Wan 2.2 uses a Mixture-of-Experts 
 | Field | File | ComfyUI folder |
 |---|---|---|
 | UNet | `wan2.2_ti2v_5B_fp16.safetensors` | `models/diffusion_models/` |
-| Text encoder | `umt5_xxl_fp8_e4m3fn_scaled.safetensors` | `models/text_encoders/` |
+| Text encoder | `umt5_xxl_fp8_e4m3fn_scaled.safetensors` *(fp8_scaled and bf16 both supported)* | `models/text_encoders/` |
 | VAE | `wan2.2_vae.safetensors` | `models/vae/` |
 
 Both high-noise and low-noise UNets are required for 14B models. The MoE switching (~50% denoising) is handled automatically by the wrapper.
