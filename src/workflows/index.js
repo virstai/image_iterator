@@ -53,28 +53,32 @@ const ARCH_META = {
     notes:       'Requires Qwen-3 text encoder (qwen_3_06b_base.safetensors) and Qwen-Image VAE. The er_sde sampler is available in recent ComfyUI builds or via the RES4LYF custom node pack.',
   },
   wanvideo: {
-    label:       'WanVideo (Wan 2.1)',
+    label:       'WanVideo (Wan 2.2)',
     loadingMode: 'split',
     videoArch:   true,
     fields:      { unetName: true, clipName: true, vaeName: true, guidance: true },
+    notes:       'Wan 2.2 14B uses a dual-UNet MoE — two diffusion model files required (high-noise + low-noise expert). Set UNet to the high-noise expert; see the setup guide for the low-noise file. Requires ComfyUI-WanVideoWrapper or native ComfyUI nodes.',
   },
   hunyuanvideo: {
     label:       'HunyuanVideo',
     loadingMode: 'split',
     videoArch:   true,
     fields:      { unetName: true, clipName: true, vaeName: true, guidance: true },
+    notes:       'Main model goes in models/diffusion_models/ (not checkpoints). Requires two text encoders: clip_l.safetensors and llava_llama3_fp8_scaled.safetensors — set CLIP to clip_l. Has native ComfyUI support (no custom nodes needed on recent ComfyUI).',
   },
   ltxvideo: {
     label:       'LTX-Video',
-    loadingMode: 'split',
+    loadingMode: 'checkpoint',
     videoArch:   true,
-    fields:      { unetName: true, clipName: true, vaeName: true, guidance: true },
+    fields:      { checkpoint: true, clipName: true, guidance: true },
+    notes:       'Checkpoint goes in models/checkpoints/. Text encoder (T5-XXL or Gemma 3 for LTX-2.3) goes in models/text_encoders/. Native ComfyUI support built-in; ComfyUI-LTXVideo custom nodes add advanced workflow features.',
   },
   cogvideox: {
     label:       'CogVideoX',
     loadingMode: 'checkpoint',
     videoArch:   true,
     fields:      { checkpoint: true, vae: true, clipName: true, cfgScale: true },
+    notes:       'Requires kijai/ComfyUI-CogVideoXWrapper. The wrapper auto-downloads models to models/CogVideo/. T5 encoder goes in models/clip/. Available in 2B, 5B, and 5B-I2V variants — no 9B variant exists.',
   },
 };
 
