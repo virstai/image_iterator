@@ -124,7 +124,7 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue';
+import { ref, computed, watch } from 'vue';
 import { submitHumanReview, refuseAccepted } from '../stores/generate.js';
 
 const props = defineProps({
@@ -138,6 +138,8 @@ const pinnedKey  = ref(null);
 const feedback   = ref('');
 const submitting = ref(false);
 
+const emit = defineEmits(['unpinned']);
+
 // Expose pin/unpin for RunSection to drive from card clicks
 defineExpose({ pin, unpin });
 
@@ -146,7 +148,10 @@ function pin(stepIndex, iterN) {
 }
 function unpin() {
   pinnedKey.value = null;
+  emit('unpinned');
 }
+
+watch(pinnedKey, () => { feedback.value = ''; });
 
 // Active iteration: last iteration of the last step that has any
 const activeEntry = computed(() => {

@@ -39,6 +39,7 @@
         :steps="steps"
         :running="running"
         :session-id="sessionId"
+        @unpinned="onDetailUnpinned"
       />
     </div>
   </div>
@@ -81,6 +82,10 @@ watch(() => props.sessionId, () => {
   detailPane.value?.unpin();
 });
 
+function onDetailUnpinned() {
+  pinnedKey.value = null;
+}
+
 // Auto-pin to human-pending or accepted-pending iteration when not already pinned
 watch(
   () => {
@@ -95,6 +100,22 @@ watch(
       pinnedKey.value = pending;
       detailPane.value?.pin(pending.stepIndex, pending.iterN);
     }
-  }
+  },
+  { immediate: true }
+);
+
+// Clear stale pinnedKey when the pinned iteration no longer exists in steps
+watch(
+  () => props.steps,
+  () => {
+    if (!pinnedKey.value) return;
+    const step = props.steps[pinnedKey.value.stepIndex];
+    const iterExists = step?.iterations.some(it => it.n === pinnedKey.value.iterN);
+    if (!iterExists) {
+      pinnedKey.value = null;
+      detailPane.value?.unpin();
+    }
+  },
+  { deep: true }
 );
 </script>
