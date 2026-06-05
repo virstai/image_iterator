@@ -8,6 +8,7 @@ const config = require('./src/services/config');
 const generateRoutes    = require('./src/routes/generate');
 const sessionsRoutes    = require('./src/routes/sessions');
 const referencesRoutes  = require('./src/routes/references');
+const archHelpRoutes    = require('./src/routes/archHelp');
 const sdapiRoutes       = require('./src/routes/sdapi');
 
 const app = express();
@@ -19,6 +20,7 @@ app.use(express.static(path.join(__dirname, 'public')));
 app.use('/api/generate',    generateRoutes);
 app.use('/api/sessions',    sessionsRoutes);
 app.use('/api/references',  referencesRoutes);
+app.use('/api/arch-help',   archHelpRoutes);
 app.use('/sdapi/v1',        sdapiRoutes);
 
 // Proxy ComfyUI image output so the browser doesn't need direct access
