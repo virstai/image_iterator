@@ -27,7 +27,7 @@ function build(params) {
     scheduler = defaults.scheduler,
     seed      = Math.floor(Math.random() * 2 ** 32),
     inputRef  = null,
-    isI2V     = false,
+    isI2V     = true,
   } = params;
 
   const imgPath = inputRef

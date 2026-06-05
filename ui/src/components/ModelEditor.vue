@@ -55,14 +55,16 @@
         <option v-for="u in assets.comfyui?.unets" :key="u" :value="u">{{ u }}</option>
       </select>
     </label>
+    <p v-if="showSplitField && fieldHint('unetName')" class="hint">{{ fieldHint('unetName') }}</p>
 
     <!-- UNet 2 (low-noise expert for Wan 2.2 MoE) -->
-    <label v-if="showSplitField && hasField('unetName2')">Low-noise UNet file <span class="hint">(optional — leave blank for single-UNet models)</span>
+    <label v-if="showSplitField && hasField('unetName2')">Low-noise UNet file
       <select v-model="form.unetName2">
         <option value="">— none —</option>
         <option v-for="u in assets.comfyui?.unets" :key="u" :value="u">{{ u }}</option>
       </select>
     </label>
+    <p v-if="showSplitField && fieldHint('unetName2')" class="hint">{{ fieldHint('unetName2') }}</p>
 
     <!-- CLIP-L (Flux / Anima) -->
     <label v-if="showSplitField && hasField('clipL')">CLIP-L file
@@ -222,6 +224,11 @@ const adapterModelList = computed(() => {
 
 function hasField(name) {
   return !!(props.archMeta[arch.value]?.fields?.[name]);
+}
+
+function fieldHint(name) {
+  const hint = props.archMeta[arch.value]?.fieldHints?.[name];
+  return typeof hint === 'string' ? hint : null;
 }
 
 async function save() {

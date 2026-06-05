@@ -57,7 +57,11 @@ const ARCH_META = {
     loadingMode: 'split',
     videoArch:   true,
     fields:      { unetName: true, unetName2: true, clipName: true, vaeName: true, guidance: true },
-    notes:       'Wan 2.2 14B uses a dual-UNet MoE — set UNet to the high-noise expert and UNet 2 to the low-noise expert. Leave UNet 2 blank for the 5B single-UNet model. Requires ComfyUI-WanVideoWrapper or native ComfyUI nodes.',
+    fieldHints:  {
+      unetName:  'High-noise expert — e.g. wan2.2_i2v_high_noise_14B_fp8_scaled.safetensors',
+      unetName2: 'Low-noise expert — e.g. wan2.2_i2v_low_noise_14B_fp8_scaled.safetensors (leave blank for 5B TI2V)',
+    },
+    notes:       'Requires ComfyUI-WanVideoWrapper on the ComfyUI server — install before use. Primary mode is image-to-video (I2V): animates the output from a previous step. 14B: set both UNet fields. 5B TI2V: first UNet only.',
   },
   hunyuanvideo: {
     label:       'HunyuanVideo',

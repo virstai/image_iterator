@@ -41,8 +41,10 @@ Both high-noise and low-noise UNets are required for 14B models. The MoE switchi
 
 ## Required custom nodes
 
-- **ComfyUI-WanVideoWrapper** *(optional — native ComfyUI nodes also work)* — [kijai/ComfyUI-WanVideoWrapper](https://github.com/kijai/ComfyUI-WanVideoWrapper)
+- **ComfyUI-WanVideoWrapper** *(required — must be installed on the ComfyUI server)* — [kijai/ComfyUI-WanVideoWrapper](https://github.com/kijai/ComfyUI-WanVideoWrapper)
+
+ComfyRefinery's WanVideo workflow uses nodes from this package (`WanVideoMoEModelLoader`, `WanVideoModelLoader`, `WanVideoTextEncode`, `WanVideoVAEDecode`). The wrapper must be present on your ComfyUI server before using this architecture.
 
 ## Notes
 
-14B models require ~20 GB VRAM at fp8. Video output is 480p or 720p depending on the workflow. The 5B TI2V model supports both text and image conditioning with a single UNet and runs on ~12 GB VRAM.
+Primary use is **image-to-video (I2V)** — animates the output image from a previous workflow step. 14B models require ~20 GB VRAM at fp8. Video output is 480p or 720p depending on the workflow. The 5B TI2V model accepts both text and image input with a single UNet and runs on ~12 GB VRAM.
