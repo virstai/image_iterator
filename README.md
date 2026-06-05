@@ -3,13 +3,14 @@
 A workflow orchestration layer on top of ComfyUI. Describe what you want, pick a
 **Workflow**, and ComfyRefinery iterates: build prompt → generate → AI reviews →
 optionally pause for human review → repeat until accepted. Workflows are reusable,
-configurable chains of steps (generate → upscale → …) that accumulate a learned
+configurable chains of steps (generate → upscale → video → …) that accumulate a learned
 **skill** — a short prompt-engineering guide the LLM uses to improve over time.
 
 ## Prerequisites
 
 - **Node.js** 18+
-- **Ollama** running with a vision-capable model (e.g. `gemma4:31b`, `llava:13b`)
+- **An OpenAI-compatible LLM** with vision support — Ollama (`gemma4:31b`, `llava:13b`),
+  LM Studio, OpenAI, vLLM, or any server that speaks `/v1/chat/completions`
 - **ComfyUI** running with at least one model loaded
 
 ## Install
@@ -31,7 +32,8 @@ Opens on **http://localhost:3000**. Override the port with `PORT=8080 npm start`
 
 ## First-time setup
 
-1. **Settings** (⚙) — set Ollama and ComfyUI URLs, pick an LLM model.
+1. **Settings** (⚙) — set LLM base URL (e.g. `http://127.0.0.1:11434/v1`), API key if
+   needed, model name, and ComfyUI URL.
 2. **Models** (⊞) — add at least one model: pick an architecture, fill in the
    checkpoint / UNet / VAE / CLIP fields. Use "Reload asset lists" if dropdowns are empty.
 3. **Workflows** (▶) — add a workflow: pick a model for the generate step, configure
@@ -42,7 +44,7 @@ Opens on **http://localhost:3000**. Override the port with `PORT=8080 npm start`
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `OLLAMA_URL` | `http://127.0.0.1:11434` | Ollama base URL |
+| `OLLAMA_URL` | `http://127.0.0.1:11434` | LLM base URL — `/v1` is appended automatically; accepts any OpenAI-compat server |
 | `COMFYUI_URL` | `http://127.0.0.1:8188` | ComfyUI base URL |
 | `OLLAMA_MODEL` | _(from config)_ | LLM model name |
 
@@ -55,15 +57,29 @@ npm test        # all tests
 
 ## Supported architectures
 
+### Image
+
 | Key | Name | Loader |
 |---|---|---|
 | `sd15` | SD 1.5 / SD 2.x | Checkpoint + optional external VAE |
 | `sdxl` | SDXL | Checkpoint + optional VAE + optional refiner |
 | `flux` | Flux.1 | Checkpoint, or split (UNet + CLIP-L + T5-XXL + VAE) |
-| `flux2` | Flux 2 | Same as Flux.1 |
+| `flux2` | Flux 2 (Dev / Klein) | Split only (UNet + CLIP/Mistral or Qwen-3 + VAE) |
 | `sd3` | SD 3 / SD 3.5 | Checkpoint + optional external VAE |
 | `chroma` | ChromaHD | Split only (UNet + T5 encoder + VAE); standard ComfyUI nodes |
 | `anima` | Anima | Split only (UNet + CLIP/Qwen-3 + Qwen-Image VAE); needs `er_sde` sampler |
+
+### Video
+
+Video architectures are used in **video steps** within a workflow. They generate a short
+clip from the final prompt text (T2V) or the previous step's output image (I2V).
+
+| Key | Name | Loader |
+|---|---|---|
+| `wanvideo` | WanVideo (Wan 2.1) | Split (UNet + CLIP/T5 + VAE) |
+| `hunyuanvideo` | HunyuanVideo | Split (UNet + CLIP/T5 + VAE) |
+| `ltxvideo` | LTX-Video | Split (UNet + CLIP/T5 + VAE) |
+| `cogvideox` | CogVideoX | Checkpoint + VAE + CLIP |
 
 ## Settings
 
@@ -131,13 +147,17 @@ All three SSE endpoints emit:
 | `token` | `{ step, iteration, phase, token }` — streaming LLM token |
 | `prompt` | `{ step, iteration, prompt }` — finalised prompt |
 | `progress` | `{ step, iteration, pct }` — ComfyUI progress 0–100 |
+| `preview` | `{ step, iteration, url }` — base64 data URL preview frame |
 | `image` | `{ step, iteration, url }` |
+| `video` | `{ step, url }` — final video URL for video steps |
 | `review` | `{ step, iteration, verdict, diagnosis }` |
 | `human_review` | `{ step, iteration, aiVerdict, aiDiagnosis }` |
 | `human_verdict` | `{ step, iteration, accepted, feedback }` |
-| `accepted_pending` | `{ step, iteration, gracePeriod, maxIterations? }` |
+| `accepted_pending` | `{ step, iteration, gracePeriod, humanReview, maxIterations? }` |
 | `acceptance_refused` | `{ step, iteration }` |
-| `done` | `{ accepted, imageUrl, sessionId, prompt, iterations }` |
+| `step_complete` | `{ step, imageUrl?, videoUrl?, accepted }` — step finished |
+| `done` | `{ accepted, imageUrl?, videoUrl?, sessionId, prompt, iterations }` |
+| `stopped` | `{ step }` — user-aborted; in-progress step cleared |
 | `error` | `{ message }` |
 
 ### Human review
@@ -154,6 +174,16 @@ All three SSE endpoints emit:
 
 Marks the most recent accepted iteration as refused. Safe on completed sessions.
 
+### Kill a running generation
+
+**`POST /api/generate/kill`**
+
+```json
+{ "sessionId": "…" }
+```
+
+Aborts the running pipeline, cancels the in-progress ComfyUI job, and emits `stopped`.
+
 ### Broadcast event stream
 
 **`GET /api/generate/events`** — SSE stream broadcasting every generation event to all
@@ -167,6 +197,11 @@ GET    /api/generate/sessions
 GET    /api/generate/sessions/:id
 DELETE /api/generate/sessions/:id
 ```
+
+### Video proxy
+
+**`GET /api/video`** — proxies ComfyUI video output so the browser doesn't need direct
+access. Same query string as ComfyUI's `/view` endpoint (`filename`, `subfolder`, `type`).
 
 ### Config, models, workflows
 
@@ -258,9 +293,9 @@ with open('output.png', 'wb') as f:
   broadcast stream) shows the result and a refuse button while it is active.
 - `cfg_scale` is forwarded as both `guidance` and `cfgScale`; each architecture uses
   whichever applies.
-- `POST /sdapi/v1/img2img` is accepted (some clients like Marinara send it when a
-  reference image is present) but treated as txt2img for now — reference image handling
-  arrives in Phase 3.
+- `POST /sdapi/v1/img2img` is accepted (some clients send it when a reference image is
+  present) but `init_images` and `denoising_strength` are ignored — use the native
+  `/api/generate/run` endpoint with `references` for reference-image workflows.
 
 ---
 
