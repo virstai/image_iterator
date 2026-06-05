@@ -24,6 +24,8 @@ const defaults = {
 function build(params) {
   const {
     unetName, unetName2, vaeName, clipName,
+    modelQuantization = 'disabled',
+    vaePrecision      = 'bf16',
     positivePrompt = '',
     width     = defaults.width,
     height    = defaults.height,
@@ -56,7 +58,7 @@ function build(params) {
     inputs: {
       model:          unetName,
       base_precision: 'bf16',
-      quantization:   'disabled',
+      quantization:   modelQuantization || 'disabled',
       load_device:    'offload_device',
     },
   };
@@ -79,7 +81,7 @@ function build(params) {
   const vaeId = id();
   nodes[vaeId] = {
     class_type: 'WanVideoVAELoader',
-    inputs: { model_name: vaeName },
+    inputs: { model_name: vaeName, precision: vaePrecision || 'bf16' },
   };
 
   // ── T5 text encoder ───────────────────────────────────────────────────────────

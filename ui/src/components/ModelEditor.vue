@@ -66,6 +66,14 @@
     </label>
     <p v-if="showSplitField && fieldHint('unetName2')" class="hint">{{ fieldHint('unetName2') }}</p>
 
+    <!-- Enum fields (e.g. model quantization) rendered after UNet fields -->
+    <label v-if="showSplitField && fieldOptions('modelQuantization')">{{ fieldLabel('modelQuantization') }}
+      <select v-model="form.modelQuantization">
+        <option value="">— select —</option>
+        <option v-for="opt in fieldOptions('modelQuantization')" :key="opt" :value="opt">{{ opt }}</option>
+      </select>
+    </label>
+
     <!-- CLIP-L (Flux / Anima) -->
     <label v-if="showSplitField && hasField('clipL')">CLIP-L file
       <select v-model="form.clipL">
@@ -95,6 +103,14 @@
       <select v-model="form.vaeName">
         <option value="">— select —</option>
         <option v-for="v in assets.comfyui?.vaes" :key="v" :value="v">{{ v }}</option>
+      </select>
+    </label>
+
+    <!-- VAE precision enum (e.g. WanVideo) -->
+    <label v-if="showSplitField && fieldOptions('vaePrecision')">{{ fieldLabel('vaePrecision') }}
+      <select v-model="form.vaePrecision">
+        <option value="">— select —</option>
+        <option v-for="opt in fieldOptions('vaePrecision')" :key="opt" :value="opt">{{ opt }}</option>
       </select>
     </label>
 
@@ -181,6 +197,7 @@ const form = reactive({
   checkpoint: '', unetName: '', unetName2: '', clipL: '', t5xxl: '', clipName: '', vaeName: '',
   vae: '', useRefiner: false, refinerCheckpoint: '',
   adapterModel: '', clipVisionModel: '', adapterWeight: '',
+  modelQuantization: '', vaePrecision: '',
 });
 
 watch(() => props.model, m => {
@@ -191,6 +208,8 @@ watch(() => props.model, m => {
   form.checkpoint        = m.checkpoint        ?? '';
   form.unetName          = m.unetName          ?? '';
   form.unetName2         = m.unetName2         ?? '';
+  form.modelQuantization = m.modelQuantization ?? '';
+  form.vaePrecision      = m.vaePrecision      ?? '';
   form.clipL             = m.clipL             ?? '';
   form.t5xxl             = m.t5xxl             ?? '';
   form.clipName          = m.clipName          ?? '';
@@ -231,6 +250,15 @@ function fieldHint(name) {
   return typeof hint === 'string' ? hint : null;
 }
 
+function fieldOptions(name) {
+  const val = props.archMeta[arch.value]?.fields?.[name];
+  return Array.isArray(val) ? val : null;
+}
+
+function fieldLabel(name) {
+  return props.archMeta[arch.value]?.fieldLabels?.[name] || name;
+}
+
 async function save() {
   if (!form.label.trim()) return alert('Enter a name for this model.');
   if (!form.architecture)  return alert('Select an architecture.');
@@ -240,7 +268,9 @@ async function save() {
     architecture:      form.architecture,
     checkpoint:        (!isSplit.value && form.checkpoint)  ? form.checkpoint  : null,
     unetName:          (isSplit.value  && form.unetName)    ? form.unetName    : null,
-    unetName2:         (isSplit.value  && form.unetName2)   ? form.unetName2   : null,
+    unetName2:         (isSplit.value  && form.unetName2)        ? form.unetName2        : null,
+    modelQuantization: (isSplit.value  && form.modelQuantization) ? form.modelQuantization : null,
+    vaePrecision:      (isSplit.value  && form.vaePrecision)      ? form.vaePrecision      : null,
     vaeName:           (isSplit.value  && form.vaeName)     ? form.vaeName     : null,
     clipL:             (isSplit.value  && form.clipL)       ? form.clipL       : null,
     t5xxl:             (isSplit.value  && form.t5xxl)       ? form.t5xxl       : null,

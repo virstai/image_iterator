@@ -56,10 +56,22 @@ const ARCH_META = {
     label:       'WanVideo (Wan 2.2)',
     loadingMode: 'split',
     videoArch:   true,
-    fields:      { unetName: true, unetName2: true, clipName: true, vaeName: true, guidance: true },
+    fields:      {
+      unetName:          true,
+      unetName2:         true,
+      modelQuantization: ['disabled', 'fp8_e4m3fn', 'fp8_e4m3fn_fast', 'fp8_e4m3fn_scaled', 'fp8_e4m3fn_scaled_fast', 'fp8_e5m2', 'fp8_e5m2_fast', 'fp8_e5m2_scaled', 'fp8_e5m2_scaled_fast'],
+      clipName:          true,
+      vaeName:           true,
+      vaePrecision:      ['bf16', 'fp16', 'fp32'],
+      guidance:          true,
+    },
     fieldHints:  {
       unetName:  'High-noise expert — e.g. wan2.2_i2v_high_noise_14B_fp8_scaled.safetensors',
       unetName2: 'Low-noise expert — e.g. wan2.2_i2v_low_noise_14B_fp8_scaled.safetensors (leave blank for 5B TI2V)',
+    },
+    fieldLabels: {
+      modelQuantization: 'Model quantization',
+      vaePrecision:      'VAE precision',
     },
     notes:       'Requires kijai/ComfyUI-WanVideoWrapper on the ComfyUI server — install before use. Primary mode is image-to-video (I2V). 14B MoE: set both UNet fields (two-sampler cascade). 5B TI2V: first UNet field only.',
   },
