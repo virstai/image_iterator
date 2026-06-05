@@ -3,6 +3,7 @@
 const registry = {
   generate: require('./generate'),
   upscale:  require('./upscale'),
+  video:    require('./video'),
 };
 
 function get(type) {
