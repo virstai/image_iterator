@@ -340,6 +340,7 @@ async function runPipeline(session, pipelineDef, cfg, res) {
       if (session.steps[currentStep]) {
         session.steps[currentStep].iterations    = [];
         session.steps[currentStep].outputImageUrl = null;
+        session.steps[currentStep].outputVideoUrl = null;
       }
       session.status = 'stopped';
       console.log(`[${tag}] stopped by user at step ${currentStep}`);
