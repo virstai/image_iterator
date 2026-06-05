@@ -103,6 +103,27 @@ async function getOutputImages(promptId) {
   return { images };
 }
 
+async function getOutputVideos(promptId) {
+  const res = await fetch(`${baseUrl()}/history/${promptId}`);
+  if (!res.ok) throw new Error(`ComfyUI history error ${res.status}`);
+  const data = await res.json();
+  const entry = data[promptId];
+  if (!entry) throw new Error('No history entry for prompt');
+  const videos = [];
+  for (const out of Object.values(entry.outputs || {})) {
+    if (out.gifs)   videos.push(...out.gifs);
+    if (out.videos) videos.push(...out.videos);
+  }
+  return { videos };
+}
+
+async function generateVideo(workflow, onProgress) {
+  const clientId = uuidv4();
+  const promptId = await queuePrompt(workflow, clientId);
+  await waitForCompletion(promptId, clientId, onProgress, null);
+  return getOutputVideos(promptId);
+}
+
 // ── Model/asset lists ──────────────────────────────────────────────────────
 
 async function fetchInputList(nodeType, inputName) {
@@ -159,4 +180,4 @@ async function interrupt() {
   try { await fetch(`${baseUrl()}/interrupt`, { method: 'POST' }); } catch { /* best effort */ }
 }
 
-module.exports = { generate, getAssets, uploadImage, interrupt };
+module.exports = { generate, generateVideo, getOutputVideos, getAssets, uploadImage, interrupt };
