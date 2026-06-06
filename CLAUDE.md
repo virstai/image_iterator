@@ -13,7 +13,7 @@ OpenAI, LM Studio, etc.) can be pointed at via `llmBaseUrl` in settings.
 ```bash
 npm start              # production (serve public/)
 npm run dev            # API --watch + Vite hot-reload UI
-npm test               # all 74 tests
+npm test               # all 130 tests
 npm run ui:build       # compile Vue → public/
 ```
 
@@ -35,7 +35,7 @@ All planned phases complete. Ready to merge to main.
 | 3 — Reference handling | ✅ Done | `d91b763` |
 | 4 — Upscale step | ✅ Done | `69d0685` |
 | 5 — Reference adapters + stop/kill fixes | ✅ Done | `be8c9d0` |
-| 6 — Video step | Deferred | — |
+| 6 — Video step | ✅ Done | `e5afc2d` |
 
 ---
 
@@ -127,8 +127,9 @@ All events carry `step` (0-indexed). Full event list:
 | `human_verdict` | `{ step, iteration, accepted, feedback }` | Human decision received |
 | `accepted_pending` | `{ step, iteration, gracePeriod, humanReview, maxIterations? }` | Grace period started |
 | `acceptance_refused` | `{ step, iteration }` | User refused during grace period |
-| `step_complete` | `{ step, imageUrl, accepted }` | Step finished; pipeline stops if `!accepted` |
-| `done` | `{ accepted, imageUrl, sessionId, prompt, iterations }` | Pipeline complete |
+| `video` | `{ step, url }` | Final video URL for video steps |
+| `step_complete` | `{ step, imageUrl?, videoUrl?, accepted }` | Step finished; pipeline stops if `!accepted` |
+| `done` | `{ accepted, imageUrl?, videoUrl?, sessionId, prompt, iterations }` | Pipeline complete |
 | `stopped` | `{ step }` | User clicked Stop; in-progress step cleared |
 | `error` | `{ message }` | Unexpected pipeline error |
 | `history` | `{ step, ...iteration }` | Replayed on `/continue` |
@@ -151,6 +152,7 @@ Back-compat: existing configs with `ollamaUrl` are migrated automatically.
 `src/steps/index.js` — `get(type)` → step module.
 `src/steps/generate.js` — generate step: LLM prompt build, vision notes, adapter/img2img routing, review.
 `src/steps/upscale.js` — upscale step: model upscaler (ESRGAN) or hires fix (re-diffusion).
+`src/steps/video.js` — video step: T2V / I2V routing, uploads init image, delegates to wanvideo (or other video arch).
 
 Step interface:
 ```js
@@ -291,15 +293,17 @@ src/
     providers/
       openai.js       — OpenAI-compat LLM driver; supports AbortSignal via options.signal
   steps/
-    index.js          — step-type registry (generate, upscale)
+    index.js          — step-type registry (generate, upscale, video)
     generate.js       — generate step: vision notes, adapter/img2img routing, chain input, review
     upscale.js        — upscale step: model (ESRGAN) + hires (re-diffusion) types
+    video.js          — video step: T2V / I2V, uploads init image, routes to video arch builder
   workflows/
     index.js          — buildWorkflow(modelConfig, params) + getDefaults(arch) + archMeta
     sd15.js           — SD1.5; supports initImage, ipAdapterImages
     sdxl.js           — SDXL + refiner; supports initImage, ipAdapterImages
     flux.js           — Flux 1 (SamplerCustomAdvanced); supports initImage, reduxImages
     flux2.js          — Flux 2 (KSampler, split-load only); supports referenceImages
+    wanvideo.js       — WanVideo I2V/T2V; native ComfyUI nodes only; MoE cascade for 14B
     sd3.js / chroma.js / anima.js
   lib/
     parsers.js        — parsePromptResponse, parseReview
@@ -333,7 +337,7 @@ data/
 ## Testing
 
 ```bash
-npm test               # all 74 tests
+npm test               # all 130 tests
 npm run test:unit      # unit tests only
 npm run test:int       # integration tests only
 ```
@@ -351,4 +355,3 @@ Integration tests write to a tmpDir; set `DATA_DIR` / `SESSIONS_DIR` / `SKILLS_D
 ## Known limitations
 
 - **Preview images**: ComfyUI's `latent2rgb` preview method does not emit binary WS frames for Flux/Flux 2 (16-channel latent space). Use `--preview-method taesd` with a Flux-compatible TAESD model for previews on those architectures. SD1.5/SDXL previews work with `latent2rgb`.
-- **Video step (Phase 6)**: Deferred — no spec yet.
