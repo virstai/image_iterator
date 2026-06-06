@@ -1,14 +1,17 @@
 'use strict';
 
-// WanVideo 2.2 workflow builder — requires kijai/ComfyUI-WanVideoWrapper.
+// WanVideo workflow — native ComfyUI nodes only (no kijai/ComfyUI-WanVideoWrapper).
 //
 // 14B MoE: pass both unetName (high-noise expert) and unetName2 (low-noise expert).
-//   Generates a two-sampler cascade: high-noise model runs first half of steps,
-//   low-noise model runs second half, sharing the same I2V image conditioning.
+//   Uses two KSamplerAdvanced nodes: high-noise covers the first half of steps,
+//   low-noise covers the second half.
 //
-// 5B TI2V: pass only unetName. Single sampler, full steps.
+// 5B TI2V: pass only unetName. Single KSampler.
+//   Wan22ImageToVideoLatent handles both T2V (no start_image) and I2V (start_image set).
 //
-// Primary mode is I2V (image-to-video) — animates inputRef from a previous step.
+// ModelSamplingSD3 is used on both models to apply the flow-matching shift.
+
+const SHIFT = 8.0;
 
 const defaults = {
   width:     832,
@@ -16,16 +19,15 @@ const defaults = {
   frames:    81,
   fps:       16,
   steps:     20,
-  guidance:  6.0,
-  shift:     5.0,
-  scheduler: 'unipc',
+  guidance:  5.0,
+  sampler:   'euler',
+  scheduler: 'simple',
 };
 
 function build(params) {
   const {
     unetName, unetName2, vaeName, clipName,
-    modelQuantization = 'disabled',
-    vaePrecision      = 'bf16',
+    modelQuantization = 'default',
     positivePrompt = '',
     width     = defaults.width,
     height    = defaults.height,
@@ -33,7 +35,7 @@ function build(params) {
     fps       = defaults.fps,
     steps     = defaults.steps,
     guidance  = defaults.guidance,
-    shift     = defaults.shift,
+    sampler   = defaults.sampler,
     scheduler = defaults.scheduler,
     seed      = Math.floor(Math.random() * 2 ** 32),
     inputRef  = null,
@@ -47,6 +49,9 @@ function build(params) {
   const isMoE     = !!unetName2;
   const splitStep = isMoE ? Math.ceil(steps / 2) : steps;
 
+  // Map legacy 'disabled' option name to the native UNETLoader value
+  const weightDtype = modelQuantization === 'disabled' ? 'default' : (modelQuantization || 'default');
+
   const nodes = {};
   let n = 1;
   const id = () => String(n++);
@@ -54,157 +59,134 @@ function build(params) {
   // ── Model loader(s) ──────────────────────────────────────────────────────────
   const highModelId = id();
   nodes[highModelId] = {
-    class_type: 'WanVideoModelLoader',
-    inputs: {
-      model:          unetName,
-      base_precision: 'bf16',
-      quantization:   modelQuantization || 'disabled',
-      load_device:    'offload_device',
-    },
+    class_type: 'UNETLoader',
+    inputs: { unet_name: unetName, weight_dtype: weightDtype },
   };
 
   let lowModelId = null;
   if (isMoE) {
     lowModelId = id();
     nodes[lowModelId] = {
-      class_type: 'WanVideoModelLoader',
-      inputs: {
-        model:          unetName2,
-        base_precision: 'bf16',
-        quantization:   'disabled',
-        load_device:    'offload_device',
-      },
+      class_type: 'UNETLoader',
+      inputs: { unet_name: unetName2, weight_dtype: 'default' },
     };
   }
 
-  // ── VAE loader ────────────────────────────────────────────────────────────────
+  // ── VAE + CLIP ────────────────────────────────────────────────────────────────
   const vaeId = id();
-  nodes[vaeId] = {
-    class_type: 'WanVideoVAELoader',
-    inputs: { model_name: vaeName, precision: vaePrecision || 'bf16' },
-  };
+  nodes[vaeId] = { class_type: 'VAELoader', inputs: { vae_name: vaeName } };
 
-  // ── T5 encoder via native CLIPLoader (supports fp8_e4m3fn_scaled) ────────────
-  // WanVideoTextEmbedBridge bridges CLIPTextEncode CONDITIONING → WANVIDEOTEXTEMBEDS,
-  // bypassing LoadWanVideoT5TextEncoder which hard-rejects fp8_scaled files.
   const clipLoaderId = id();
-  nodes[clipLoaderId] = {
-    class_type: 'CLIPLoader',
-    inputs: { clip_name: clipName, type: 'wan' },
-  };
+  nodes[clipLoaderId] = { class_type: 'CLIPLoader', inputs: { clip_name: clipName, type: 'wan' } };
 
+  // ── Text conditioning ─────────────────────────────────────────────────────────
   const posEncId = id();
-  nodes[posEncId] = {
-    class_type: 'CLIPTextEncode',
-    inputs: { clip: [clipLoaderId, 0], text: positivePrompt },
-  };
+  nodes[posEncId] = { class_type: 'CLIPTextEncode', inputs: { clip: [clipLoaderId, 0], text: positivePrompt } };
 
   const negEncId = id();
-  nodes[negEncId] = {
-    class_type: 'CLIPTextEncode',
-    inputs: { clip: [clipLoaderId, 0], text: '' },
-  };
+  nodes[negEncId] = { class_type: 'CLIPTextEncode', inputs: { clip: [clipLoaderId, 0], text: '' } };
 
-  const textEncId = id();
-  nodes[textEncId] = {
-    class_type: 'WanVideoTextEmbedBridge',
-    inputs: { positive: [posEncId, 0], negative: [negEncId, 0] },
-  };
+  // ── Flow-matching shift (ModelSamplingSD3) ────────────────────────────────────
+  const sampledHighId = id();
+  nodes[sampledHighId] = { class_type: 'ModelSamplingSD3', inputs: { model: [highModelId, 0], shift: SHIFT } };
 
-  // ── Image conditioning (I2V) ──────────────────────────────────────────────────
-  let imageEmbedsRef = null;
+  let sampledLowId = null;
+  if (isMoE) {
+    sampledLowId = id();
+    nodes[sampledLowId] = { class_type: 'ModelSamplingSD3', inputs: { model: [lowModelId, 0], shift: SHIFT } };
+  }
+
+  // ── Latent + I2V conditioning ─────────────────────────────────────────────────
+  // WanImageToVideo creates the 36-channel combined latent (16 noise + 16 image + 4 mask)
+  // expected by Wan 2.1/2.2 14B I2V model weights — BUT ONLY when given wan_2.1_vae.
+  //
+  // IMPORTANT: using wan2.2_vae here causes WanImageToVideo to create a 64-channel latent
+  // (the TI2V format), which is incompatible with the 14B I2V models. Always use
+  // wan_2.1_vae.safetensors with the 14B I2V models, NOT wan2.2_vae.safetensors.
+  // wan2.2_vae is only correct for the 5B TI2V single-UNet model.
+  //
+  // Wan22ImageToVideoLatent also creates 64 channels and must NOT be used for I2V 14B.
+  let posRef    = [posEncId, 0];
+  let negRef    = [negEncId, 0];
+  let latentRef;
+
   if (isI2V && imgPath) {
     const loadImgId = id();
-    nodes[loadImgId] = {
-      class_type: 'LoadImage',
-      inputs: { image: imgPath },
-    };
+    nodes[loadImgId] = { class_type: 'LoadImage', inputs: { image: imgPath } };
 
-    const imgEncId = id();
-    nodes[imgEncId] = {
-      class_type: 'WanVideoImageToVideoEncode',
+    const i2vId = id();
+    nodes[i2vId] = {
+      class_type: 'WanImageToVideo',
       inputs: {
-        width,
-        height,
-        num_frames:           frames,
-        noise_aug_strength:   0.0,
-        start_latent_strength:1.0,
-        end_latent_strength:  0.0,
-        force_offload:        true,
-        vae:                  [vaeId, 0],
-        start_image:          [loadImgId, 0],
+        positive:    [posEncId, 0],
+        negative:    [negEncId, 0],
+        vae:         [vaeId, 0],
+        start_image: [loadImgId, 0],
+        width, height, length: frames, batch_size: 1,
       },
     };
-    imageEmbedsRef = [imgEncId, 0];
+    posRef    = [i2vId, 0];
+    negRef    = [i2vId, 1];
+    latentRef = [i2vId, 2];
+  } else {
+    // T2V — standard empty latent; only valid with T2V model files (16-channel patchify)
+    const emptyId = id();
+    nodes[emptyId] = {
+      class_type: 'EmptyHunyuanLatentVideo',
+      inputs: { width, height, video_length: frames, batch_size: 1 },
+    };
+    latentRef = [emptyId, 0];
   }
 
   // ── Sampler(s) ────────────────────────────────────────────────────────────────
-  const buildSamplerInputs = (modelRef, startStep, endStep, prevSamplesRef = null) => {
-    const inp = {
-      model:            modelRef,
-      steps,
-      cfg:              guidance,
-      shift,
-      seed,
-      force_offload:    true,
-      scheduler,
-      riflex_freq_index:0,
-      text_embeds:      [textEncId, 0],
-    };
-    if (imageEmbedsRef) inp.image_embeds = imageEmbedsRef;
-    if (prevSamplesRef) inp.samples      = prevSamplesRef;
-    if (isMoE) {
-      inp.start_step = startStep;
-      inp.end_step   = endStep;
-    }
-    return inp;
-  };
-
   let finalSamplesRef;
 
   if (isMoE) {
     const highSamplerId = id();
     nodes[highSamplerId] = {
-      class_type: 'WanVideoSampler',
-      inputs: buildSamplerInputs([highModelId, 0], 0, splitStep),
+      class_type: 'KSamplerAdvanced',
+      inputs: {
+        model: [sampledHighId, 0], positive: posRef, negative: negRef,
+        latent_image: latentRef,
+        add_noise: 'enable', noise_seed: seed, steps, cfg: guidance,
+        sampler_name: sampler, scheduler,
+        start_at_step: 0, end_at_step: splitStep,
+        return_with_leftover_noise: 'enable',
+      },
     };
 
     const lowSamplerId = id();
     nodes[lowSamplerId] = {
-      class_type: 'WanVideoSampler',
-      inputs: buildSamplerInputs([lowModelId, 0], splitStep, steps, [highSamplerId, 0]),
+      class_type: 'KSamplerAdvanced',
+      inputs: {
+        model: [sampledLowId, 0], positive: posRef, negative: negRef,
+        latent_image: [highSamplerId, 0],
+        add_noise: 'disable', noise_seed: seed, steps, cfg: guidance,
+        sampler_name: sampler, scheduler,
+        start_at_step: splitStep, end_at_step: 10000,
+        return_with_leftover_noise: 'disable',
+      },
     };
     finalSamplesRef = [lowSamplerId, 0];
   } else {
     const samplerId = id();
     nodes[samplerId] = {
-      class_type: 'WanVideoSampler',
-      inputs: buildSamplerInputs([highModelId, 0], 0, steps),
+      class_type: 'KSampler',
+      inputs: {
+        model: [sampledHighId, 0], positive: posRef, negative: negRef,
+        latent_image: latentRef,
+        seed, steps, cfg: guidance, sampler_name: sampler, scheduler, denoise: 1.0,
+      },
     };
     finalSamplesRef = [samplerId, 0];
   }
 
-  // ── Decode ────────────────────────────────────────────────────────────────────
+  // ── Decode + output ───────────────────────────────────────────────────────────
   const decodeId = id();
-  nodes[decodeId] = {
-    class_type: 'WanVideoDecode',
-    inputs: {
-      vae:               [vaeId, 0],
-      samples:           finalSamplesRef,
-      enable_vae_tiling: false,
-      tile_x:            272,
-      tile_y:            272,
-      tile_stride_x:     144,
-      tile_stride_y:     128,
-    },
-  };
+  nodes[decodeId] = { class_type: 'VAEDecode', inputs: { vae: [vaeId, 0], samples: finalSamplesRef } };
 
-  // ── Output ────────────────────────────────────────────────────────────────────
   const createVideoId = id();
-  nodes[createVideoId] = {
-    class_type: 'CreateVideo',
-    inputs: { images: [decodeId, 0], fps },
-  };
+  nodes[createVideoId] = { class_type: 'CreateVideo', inputs: { images: [decodeId, 0], fps } };
 
   const saveVideoId = id();
   nodes[saveVideoId] = {

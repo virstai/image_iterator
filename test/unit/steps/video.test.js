@@ -46,7 +46,7 @@ test('buildComfyWorkflow: routes to wanvideo builder for wanvideo arch', () => {
   };
   const wf = video.buildComfyWorkflow(stepDef, { inputRef: null, isI2V: false }, ctx);
   const types = Object.values(wf).map(n => n.class_type);
-  assert.ok(types.includes('WanVideoModelLoader'), 'wanvideo builder was called');
+  assert.ok(types.includes('UNETLoader'), 'wanvideo builder was called');
   assert.ok(types.includes('CreateVideo'),         'CreateVideo output node present');
   assert.ok(types.includes('SaveVideo'),           'SaveVideo output node present');
 });

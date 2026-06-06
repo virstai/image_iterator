@@ -59,10 +59,9 @@ const ARCH_META = {
     fields:      {
       unetName:          true,
       unetName2:         true,
-      modelQuantization: ['disabled', 'fp8_e4m3fn', 'fp8_e4m3fn_fast', 'fp8_e4m3fn_scaled', 'fp8_e4m3fn_scaled_fast', 'fp8_e5m2', 'fp8_e5m2_fast', 'fp8_e5m2_scaled', 'fp8_e5m2_scaled_fast'],
+      modelQuantization: ['default', 'fp8_e4m3fn', 'fp8_e4m3fn_fast', 'fp8_e5m2'],
       clipName:          true,
       vaeName:           true,
-      vaePrecision:      ['bf16', 'fp16', 'fp32'],
       guidance:          true,
     },
     fieldHints:  {
@@ -71,9 +70,8 @@ const ARCH_META = {
     },
     fieldLabels: {
       modelQuantization: 'Model quantization',
-      vaePrecision:      'VAE precision',
     },
-    notes:       'Requires kijai/ComfyUI-WanVideoWrapper on the ComfyUI server — install before use. Primary mode is image-to-video (I2V). 14B MoE: set both UNet fields (two-sampler cascade). 5B TI2V: first UNet field only.',
+    notes:       'No custom nodes required — uses native ComfyUI nodes. Primary mode is image-to-video (I2V). 14B MoE: set both UNet fields (two-sampler cascade). 5B TI2V: first UNet field only. Pre-quantized models (e.g. _fp8_scaled) should use "default" quantization.',
   },
   hunyuanvideo: {
     label:       'HunyuanVideo',

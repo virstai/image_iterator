@@ -28,24 +28,41 @@ async function queuePrompt(workflow, clientId) {
 
 function waitForCompletion(promptId, clientId, onProgress, onPreview) {
   return new Promise((resolve, reject) => {
-    const ws = new WebSocket(`${wsUrl()}/ws?clientId=${clientId}`);
-    let done = false;
+    let done        = false;
+    let ws          = null;
+    let reconnects  = 0;
+    const MAX_RECONNECTS = 30;
 
     const finish = (err) => {
       if (done) return;
       done = true;
-      clearTimeout(timeout);
-      ws.close();
-      if (err) reject(err);
-      else resolve();
+      try { ws?.close(); } catch {}
+      err ? reject(err) : resolve();
     };
 
-    const timeout = setTimeout(
-      () => finish(new Error('ComfyUI timed out after 5 minutes')),
-      5 * 60 * 1000,
-    );
+    // Poll /history to check whether the prompt completed while the WS was down.
+    // Returns true (success), throws (execution_error), or returns false (still running).
+    const checkHistory = async () => {
+      try {
+        const res   = await fetch(`${baseUrl()}/history/${promptId}`);
+        if (!res.ok) return false;
+        const data  = await res.json();
+        const entry = data[promptId];
+        if (!entry) return false;
+        const status = entry.status;
+        if (status?.status_str === 'error') {
+          const msgs   = status.messages ?? [];
+          const errMsg = msgs.find(([t]) => t === 'execution_error')?.[1]?.exception_message;
+          throw new Error(`ComfyUI: ${errMsg || 'execution error'}`);
+        }
+        return status?.completed === true;
+      } catch (e) {
+        if (e.message.startsWith('ComfyUI:')) throw e;
+        return false; // network hiccup — assume still running
+      }
+    };
 
-    ws.on('message', (raw, isBinary) => {
+    const handleMessage = (raw, isBinary) => {
       // Binary frame: 4-byte big-endian event type + image data (JPEG preview from ComfyUI)
       if (isBinary) {
         const frameType = raw.length > 4 ? raw.readUInt32BE(0) : -1;
@@ -81,12 +98,35 @@ function waitForCompletion(promptId, clientId, onProgress, onPreview) {
           }
         }
       } catch { /* ignore parse errors */ }
-    });
+    };
 
-    ws.on('error', (err) => finish(new Error(`ComfyUI WS error: ${err.message}`)));
-    // If the socket closes before we get a completion message (e.g. ComfyUI crashes / OOM
-    // kills the process), reject immediately rather than waiting for the 5-minute timeout.
-    ws.on('close', () => finish(new Error('ComfyUI WebSocket closed unexpectedly')));
+    const connect = () => {
+      if (done) return;
+      ws = new WebSocket(`${wsUrl()}/ws?clientId=${clientId}`);
+      ws.on('open',    ()          => { reconnects = 0; });
+      ws.on('message', handleMessage);
+      // Log WS errors but don't finish — the 'close' event fires after 'error' and
+      // handles the reconnect/fail decision there.
+      ws.on('error',   (err)       => console.error(`[comfyui] WS error: ${err.message}`));
+      ws.on('close',   async ()    => {
+        if (done) return;
+        // Check whether generation completed while we were disconnected
+        try {
+          if (await checkHistory()) { finish(); return; }
+        } catch (e) { finish(e); return; }
+        // Still running — reconnect with linear backoff capped at 30 s
+        reconnects++;
+        if (reconnects > MAX_RECONNECTS) {
+          finish(new Error(`ComfyUI WebSocket disconnected after ${MAX_RECONNECTS} reconnect attempts`));
+          return;
+        }
+        const delay = Math.min(2000 * reconnects, 30_000);
+        console.log(`[comfyui] WS disconnected, reconnecting in ${delay / 1000}s (attempt ${reconnects}/${MAX_RECONNECTS})...`);
+        setTimeout(connect, delay);
+      });
+    };
+
+    connect();
   });
 }
 
@@ -109,11 +149,23 @@ async function getOutputVideos(promptId) {
   const data = await res.json();
   const entry = data[promptId];
   if (!entry) throw new Error('No history entry for prompt');
+
+  const VIDEO_EXTS = /\.(mp4|webm|gif|mov|avi|mkv|webp)$/i;
   const videos = [];
+
   for (const out of Object.values(entry.outputs || {})) {
-    if (out.gifs)   videos.push(...out.gifs);
-    if (out.videos) videos.push(...out.videos);
+    for (const val of Object.values(out)) {
+      if (!Array.isArray(val)) continue;
+      for (const item of val) {
+        if (item?.filename && VIDEO_EXTS.test(item.filename)) videos.push(item);
+      }
+    }
   }
+
+  if (!videos.length) {
+    console.log('[comfyui] getOutputVideos: no video found. History outputs:', JSON.stringify(entry.outputs ?? {}, null, 2));
+  }
+
   return { videos };
 }
 
