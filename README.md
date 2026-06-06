@@ -6,6 +6,8 @@ optionally pause for human review → repeat until accepted. Workflows are reusa
 configurable chains of steps (generate → upscale → video → …) that accumulate a learned
 **skill** — a short prompt-engineering guide the LLM uses to improve over time.
 
+> **Note:** This is a vibe-coded / AI-assisted project. Most features work, but many have not been fully human-tested — especially less common model architectures and more complex multi-step workflows. Expect rough edges and bugs.
+
 ## Prerequisites
 
 - **Node.js** 18+
