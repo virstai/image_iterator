@@ -3,7 +3,7 @@
     <div class="detail-pane-header">
       <template v-if="displayed">
         <div>
-          <div class="detail-pane-title">Iteration #{{ displayed.iteration.n }}</div>
+          <div class="detail-pane-title">{{ displayed.isVideo ? 'Video Output' : `Iteration #${displayed.iteration.n}` }}</div>
           <div class="detail-pane-subtitle">{{ displayed.stepLabel }}</div>
         </div>
       </template>
@@ -27,8 +27,41 @@
         {{ running ? 'Waiting for first iteration…' : 'No iteration selected' }}
       </div>
 
+      <template v-else-if="displayed.isVideo">
+        <!-- Video step -->
+        <div class="detail-image-wrap">
+          <video
+            v-if="displayed.videoUrl"
+            :src="displayed.videoUrl"
+            controls loop
+            style="width:100%;border-radius:4px"
+          ></video>
+          <div v-else class="detail-image-placeholder">
+            Generating… {{ displayed.progress || 0 }}%
+            <div v-if="displayed.progress > 0" class="detail-progress-overlay">
+              <div class="detail-progress-fill" :style="{ width: displayed.progress + '%' }"></div>
+            </div>
+          </div>
+        </div>
+        <div class="detail-info">
+          <div class="detail-field">
+            <label>Status</label>
+            <div class="val">
+              <span v-if="displayed.videoUrl" class="verdict accept">Complete</span>
+              <span v-else class="iter-status">Generating…</span>
+            </div>
+          </div>
+          <div v-if="displayed.progress > 0 && !displayed.videoUrl" class="detail-field">
+            <label>Progress</label>
+            <div class="progress-bar" style="height:4px">
+              <div class="fill" :style="{ width: displayed.progress + '%' }"></div>
+            </div>
+          </div>
+        </div>
+      </template>
+
       <template v-else>
-        <!-- Image -->
+        <!-- Image iteration -->
         <div class="detail-image-wrap">
           <img
             v-if="displayed.iteration.imageUrl"
@@ -140,11 +173,14 @@ const submitting = ref(false);
 
 const emit = defineEmits(['unpinned']);
 
-// Expose pin/unpin for RunSection to drive from card clicks
-defineExpose({ pin, unpin });
+// Expose pin/unpin/pinStep for RunSection to drive from card/video clicks
+defineExpose({ pin, pinStep, unpin });
 
 function pin(stepIndex, iterN) {
   pinnedKey.value = { stepIndex, iterN };
+}
+function pinStep(stepIndex) {
+  pinnedKey.value = { stepIndex, iterN: null };
 }
 function unpin() {
   pinnedKey.value = null;
@@ -153,10 +189,18 @@ function unpin() {
 
 watch(pinnedKey, () => { feedback.value = ''; });
 
-// Active iteration: last iteration of the last step that has any
+function videoEntry(step, i) {
+  return { isVideo: true, videoUrl: step.videoUrl ?? null, progress: step.progress ?? 0, stepIndex: i, stepLabel: `${step.type} · ${step.label}` };
+}
+
+// Active entry: last step that is running or has output (video steps + iteration steps)
 const activeEntry = computed(() => {
   for (let i = props.steps.length - 1; i >= 0; i--) {
     const step = props.steps[i];
+    if (step.type === 'video') {
+      if (step.videoUrl || step.progress > 0) return videoEntry(step, i);
+      continue;
+    }
     if (step.iterations.length) {
       const iter = step.iterations[step.iterations.length - 1];
       return { iteration: iter, stepIndex: i, stepLabel: `${step.type} · ${step.label}` };
@@ -165,11 +209,12 @@ const activeEntry = computed(() => {
   return null;
 });
 
-// Pinned iteration
+// Pinned entry: supports both iteration pins (iterN != null) and video step pins (iterN == null)
 const pinnedEntry = computed(() => {
   if (!pinnedKey.value) return null;
   const step = props.steps[pinnedKey.value.stepIndex];
   if (!step) return null;
+  if (step.type === 'video') return videoEntry(step, pinnedKey.value.stepIndex);
   const iter = step.iterations.find(it => it.n === pinnedKey.value.iterN);
   if (!iter) return null;
   return { iteration: iter, stepIndex: pinnedKey.value.stepIndex, stepLabel: `${step.type} · ${step.label}` };
@@ -177,9 +222,11 @@ const pinnedEntry = computed(() => {
 
 const displayed = computed(() => pinnedKey.value ? pinnedEntry.value : activeEntry.value);
 
-const showProgress = computed(() =>
-  displayed.value?.iteration.progress > 0 && displayed.value?.iteration.progress < 100
-);
+const showProgress = computed(() => {
+  const d = displayed.value;
+  if (!d || d.isVideo) return false;
+  return d.iteration.progress > 0 && d.iteration.progress < 100;
+});
 
 const displayPrompt = computed(() => {
   const it = displayed.value?.iteration;
@@ -190,6 +237,7 @@ const displayReview = computed(() => {
   const it = displayed.value?.iteration;
   return it?.fullReview ?? it?.diagnosis ?? (it?.streamingReview || '—');
 });
+
 
 async function submitReview(accept) {
   if (!props.sessionId || !displayed.value) return;

@@ -17,10 +17,15 @@
             <span class="step-type-badge">{{ step.type }}</span>
             {{ step.label || step.type }}
           </div>
-          <!-- Video step: progress bar then inline player -->
+          <!-- Video step: clickable thumbnail → pins into detail pane -->
           <template v-if="step.type === 'video'">
-            <div v-if="step.videoUrl" class="video-output">
-              <video :src="step.videoUrl" controls loop style="max-width:100%;border-radius:4px"></video>
+            <div
+              v-if="step.videoUrl"
+              :class="['video-output', { selected: isPinnedStep(step.index) }]"
+              @click="onVideoClick(step.index)"
+              title="Click to view in detail pane"
+            >
+              <video :src="step.videoUrl" loop muted style="max-width:100%;border-radius:4px;pointer-events:none"></video>
             </div>
             <div v-else style="font-size:11px;color:var(--muted);padding:4px 0">
               <template v-if="step.progress > 0">
@@ -83,14 +88,27 @@ function isPinned(stepIndex, iterN) {
   return pinnedKey.value?.stepIndex === stepIndex && pinnedKey.value?.iterN === iterN;
 }
 
+function isPinnedStep(stepIndex) {
+  return pinnedKey.value?.stepIndex === stepIndex && pinnedKey.value?.iterN == null;
+}
+
 function onCardClick(stepIndex, iterN) {
   if (isPinned(stepIndex, iterN)) {
-    // Clicking the already-pinned card → unpin (return to Active)
     pinnedKey.value = null;
     detailPane.value?.unpin();
   } else {
     pinnedKey.value = { stepIndex, iterN };
     detailPane.value?.pin(stepIndex, iterN);
+  }
+}
+
+function onVideoClick(stepIndex) {
+  if (isPinnedStep(stepIndex)) {
+    pinnedKey.value = null;
+    detailPane.value?.unpin();
+  } else {
+    pinnedKey.value = { stepIndex, iterN: null };
+    detailPane.value?.pinStep(stepIndex);
   }
 }
 
@@ -156,5 +174,15 @@ watch(
 
 .video-output {
   padding: 4px 0;
+  cursor: pointer;
+  border-radius: 4px;
+  outline: 2px solid transparent;
+  transition: outline-color 0.15s;
+}
+.video-output.selected {
+  outline-color: var(--accent, #7c3aed);
+}
+.video-output:hover {
+  outline-color: color-mix(in srgb, var(--accent, #7c3aed) 50%, transparent);
 }
 </style>
